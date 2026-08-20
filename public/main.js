@@ -141,8 +141,9 @@ socket.on('game:needsChoice', ({ choiceType, suit, options, cardIds }) => {
 
 $('#btn-create-room').addEventListener('click', () => {
   const name = $('#input-name').value.trim();
+  const roomCode = $('#input-create-roomcode').value.trim();
   if (!name) return showToast('名前を入力してください');
-  socket.emit('room:create', { name });
+  socket.emit('room:create', { name, roomCode });
 });
 
 $('#btn-join-room').addEventListener('click', () => {
@@ -259,6 +260,12 @@ function renderTop(state) {
     if (p.isCurrentTurn) chip.classList.add('turn');
     if (p.status === 'finished') chip.classList.add('finished');
     if (p.status === 'foul' || p.status === 'left') chip.classList.add('gone');
+    if (p.id === myPlayerId && p.status === 'active') {
+      chip.classList.add('me-tappable');
+      chip.addEventListener('click', () => {
+        $('#modal-forfeit').classList.remove('hidden');
+      });
+    }
     if (p.rank) {
       const medal = RANK_MEDAL[p.rank];
       const b = el('div', 'pbadge' + (medal ? ' medal' : ''), medal || `${p.rank}位`);
@@ -665,4 +672,12 @@ $('#btn-back-lobby').addEventListener('click', () => {
   $('#modal-result').classList.add('hidden');
   showScreen('lobby');
   if (latestLobby) renderLobby(latestLobby);
+});
+
+$('#btn-forfeit-confirm').addEventListener('click', () => {
+  socket.emit('game:forfeit');
+  $('#modal-forfeit').classList.add('hidden');
+});
+$('#btn-forfeit-cancel').addEventListener('click', () => {
+  $('#modal-forfeit').classList.add('hidden');
 });

@@ -22,6 +22,10 @@
       <input id="input-name" type="text" maxlength="12" placeholder="なまえ" />
     </label>
 
+    <label class="field">
+      <span>ルームID（任意）</span>
+      <input id="input-create-roomcode" type="text" maxlength="20" placeholder="空欄でランダム生成" />
+    </label>
     <button id="btn-create-room" class="btn btn-primary">ルームを作成する</button>
 
     <div class="divider">または</div>
@@ -123,6 +127,16 @@
     <h3>ジョーカーの役割を選択</h3>
     <p id="stairs-joker-desc">ジョーカーがどの数字の役割をするか選んでください</p>
     <div id="stairs-joker-options" class="chip-grid"></div>
+  </div>
+</div>
+
+<!-- 自分のアイコンタップ：棄権確認モーダル -->
+<div id="modal-forfeit" class="modal hidden">
+  <div class="modal-box">
+    <h3>ゲームを棄権しますか？</h3>
+    <p>棄権すると最下位確定となります。</p>
+    <button id="btn-forfeit-confirm" class="btn btn-danger">棄権する</button>
+    <button id="btn-forfeit-cancel" class="btn btn-ghost">キャンセル</button>
   </div>
 </div>
 

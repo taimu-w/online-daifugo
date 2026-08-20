@@ -50,8 +50,12 @@ io.on('connection', (socket) => {
     return { room, player };
   }
 
-  socket.on('room:create', ({ name } = {}) => {
-    const room = manager.createRoom();
+  socket.on('room:create', ({ name, roomCode } = {}) => {
+    const { room, error: roomError } = manager.createRoom(roomCode);
+    if (roomError) {
+      socket.emit('error', { message: roomError });
+      return;
+    }
     const { player, error } = room.addPlayer(name);
     if (error) {
       socket.emit('error', { message: error });

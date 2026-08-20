@@ -7,6 +7,7 @@ const MAX_PLAYERS = 7;
 const MIN_PLAYERS = 2;
 const DISCONNECT_GRACE_MS = 60 * 1000;
 const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 紛らわしい文字を除外
+const CUSTOM_ROOM_CODE_MAX_LENGTH = 20;
 
 function genId() {
   return crypto.randomBytes(12).toString('hex');
@@ -18,6 +19,10 @@ function genRoomCode(existingCodes) {
     code = Array.from({ length: 6 }, () => ROOM_CODE_CHARS[Math.floor(Math.random() * ROOM_CODE_CHARS.length)]).join('');
   } while (existingCodes.has(code));
   return code;
+}
+
+function normalizeCustomRoomCode(raw) {
+  return (raw || '').trim().toUpperCase();
 }
 
 class Room {
@@ -104,11 +109,22 @@ class RoomManager {
     this.rooms = new Map();
   }
 
-  createRoom() {
-    const code = genRoomCode(new Set(this.rooms.keys()));
+  createRoom(customCode) {
+    let code;
+    if (customCode) {
+      const normalized = normalizeCustomRoomCode(customCode);
+      if (!normalized) return { error: 'ルームIDを入力してください' };
+      if (normalized.length > CUSTOM_ROOM_CODE_MAX_LENGTH) {
+        return { error: `ルームIDは${CUSTOM_ROOM_CODE_MAX_LENGTH}文字以内で入力してください` };
+      }
+      if (this.rooms.has(normalized)) return { error: 'このルームIDは既に使用されています' };
+      code = normalized;
+    } else {
+      code = genRoomCode(new Set(this.rooms.keys()));
+    }
     const room = new Room(code);
     this.rooms.set(code, room);
-    return room;
+    return { room };
   }
 
   getRoom(code) {
