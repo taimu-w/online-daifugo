@@ -492,12 +492,6 @@ $('#btn-pass').addEventListener('click', () => {
   socket.emit('game:pass');
 });
 
-$('#btn-forfeit').addEventListener('click', () => {
-  if (confirm('ゲームを棄権しますか？（最下位確定となります）')) {
-    socket.emit('game:forfeit');
-  }
-});
-
 // ---------- Qボンバー モーダル ----------
 
 function renderPendingModals(state) {

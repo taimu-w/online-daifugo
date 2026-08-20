@@ -505,8 +505,6 @@ button {
 }
 .action-bar.visible { opacity: 1; transform: translateY(0); pointer-events: auto; }
 .action-bar .btn { margin-top: 0; flex: none; width: auto; padding: 10px 16px; }
-.footer-links { text-align: center; margin-top: 4px; }
-.link-btn { background: none; color: var(--text-dim); font-size: 0.72rem; text-decoration: underline; }
 
 /* ---------- カード ---------- */
 .card {
@@ -736,5 +734,4 @@ button {
   .my-hand .card.selected:not(:first-child) { margin-left: 14px; }
   .my-hand .card.selected + .card { margin-left: 14px; }
   .action-bar .btn { padding: 8px 12px; font-size: 0.85rem; }
-  .footer-links { margin-top: 2px; }
 }
