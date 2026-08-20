@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>陸上部のオンライン大富豪</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<div id="toast" class="toast hidden"></div>
+
+<!-- ホーム画面 -->
+<section id="screen-home" class="screen">
+  <div class="home-card">
+    <div class="home-suits"><span>♠</span><span>♥</span><span>♦</span><span>♣</span></div>
+    <h1>オンライン大富豪</h1>
+    <p class="sub">最大7人まであそべるよ！</p>
+
+    <label class="field">
+      <span>プレイヤー名</span>
+      <input id="input-name" type="text" maxlength="12" placeholder="なまえ" />
+    </label>
+
+    <button id="btn-create-room" class="btn btn-primary">ルームを作成する</button>
+
+    <div class="divider">または</div>
+
+    <label class="field">
+      <span>ルームID</span>
+      <input id="input-roomcode" type="text" maxlength="6" placeholder="例: A1B2C3" autocapitalize="characters" />
+    </label>
+    <button id="btn-join-room" class="btn btn-secondary">ルームに参加する</button>
+  </div>
+</section>
+
+<!-- ロビー画面 -->
+<section id="screen-lobby" class="screen hidden">
+  <header class="lobby-header">
+    <h2>ルーム待機中</h2>
+    <div class="room-code-box">
+      <span>ルームID</span>
+      <strong id="lobby-room-code">------</strong>
+      <button id="btn-copy-code" class="btn-mini" title="コピー">コピー</button>
+    </div>
+  </header>
+
+  <ul id="lobby-players" class="lobby-players"></ul>
+
+  <p id="lobby-hint" class="hint"></p>
+
+  <div class="lobby-actions">
+    <button id="btn-start-game" class="btn btn-primary" disabled>ゲーム開始</button>
+    <button id="btn-leave-room" class="btn btn-ghost">ルームを退出</button>
+  </div>
+</section>
+
+<!-- ゲーム画面 -->
+<section id="screen-game" class="screen hidden">
+
+  <!-- 上部: プレイヤー一覧 -->
+  <header id="game-top" class="game-top"></header>
+
+  <!-- 中央: 場のカード -->
+  <main id="game-center" class="game-center">
+    <div class="status-badges" id="status-badges"></div>
+    <div id="special-banner" class="special-banner hidden"></div>
+    <div class="table-felt"><div id="field-cards" class="field-cards"></div></div>
+    <div class="timer-wrap">
+      <div id="turn-indicator" class="turn-indicator"></div>
+      <div class="timer-bar"><div id="timer-fill" class="timer-fill"></div></div>
+    </div>
+    <div id="log-popup" class="log-popup"></div>
+  </main>
+
+  <!-- 下部: 自分の手札 -->
+  <footer class="game-bottom">
+    <div class="hand-info">
+      <span id="hand-info-text"></span>
+      <button id="btn-clear-sel" class="btn-clear-sel hidden">選択を解除</button>
+    </div>
+    <div id="my-hand" class="my-hand"></div>
+    <div id="action-bar" class="action-bar">
+      <button id="btn-pass" class="btn btn-ghost">パス</button>
+      <button id="btn-play" class="btn btn-primary hidden" disabled>出す</button>
+    </div>
+    <div class="footer-links">
+      <button id="btn-forfeit" class="link-btn">ゲームを棄権する</button>
+    </div>
+  </footer>
+</section>
+
+<!-- Qボンバー選択モーダル -->
+<div id="modal-qbomber" class="modal hidden">
+  <div class="modal-box">
+    <h3>Qボンバー！</h3>
+    <p id="qbomber-desc"></p>
+    <div id="qbomber-options" class="chip-grid"></div>
+    <button id="btn-qbomber-confirm" class="btn btn-primary" disabled>決定</button>
+  </div>
+</div>
+
+<!-- 7わたし選択モーダル -->
+<div id="modal-seven" class="modal hidden">
+  <div class="modal-box">
+    <h3>7わたし！</h3>
+    <p id="seven-desc"></p>
+    <div id="seven-cards" class="seven-cards"></div>
+    <button id="btn-seven-confirm" class="btn btn-primary" disabled>決定</button>
+  </div>
+</div>
+
+<!-- 10捨て モーダル -->
+<div id="modal-ten" class="modal hidden">
+  <div class="modal-box">
+    <h3>10捨て！</h3>
+    <p id="ten-desc"></p>
+    <div id="ten-cards" class="chip-grid"></div>
+    <button id="btn-ten-confirm" class="btn btn-primary" disabled>決定</button>
+  </div>
+</div>
+
+<!-- 階段ジョーカー役割選択モーダル -->
+<div id="modal-stairs-joker" class="modal hidden">
+  <div class="modal-box">
+    <h3>ジョーカーの役割を選択</h3>
+    <p id="stairs-joker-desc">ジョーカーがどの数字の役割をするか選んでください</p>
+    <div id="stairs-joker-options" class="chip-grid"></div>
+  </div>
+</div>
+
+<!-- 結果画面 -->
+<div id="modal-result" class="modal hidden">
+  <div class="modal-box">
+    <h3>ゲーム終了！</h3>
+    <ol id="result-list" class="result-list"></ol>
+    <button id="btn-restart" class="btn btn-primary">もう一度プレイ</button>
+    <button id="btn-back-lobby" class="btn btn-ghost">ロビーに戻る</button>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/main.js"></script>
+</body>
+</html>
