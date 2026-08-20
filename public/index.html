@@ -17,6 +17,11 @@
     <h1>オンライン大富豪</h1>
     <p class="sub">最大7人まであそべるよ！</p>
 
+    <button id="btn-open-avatar" class="avatar-picker-btn" type="button">
+      <div class="avatar avatar-xl" id="home-avatar-preview"></div>
+      <span class="avatar-picker-label">アイコンを設定</span>
+    </button>
+
     <label class="field">
       <span>プレイヤー名</span>
       <input id="input-name" type="text" maxlength="12" placeholder="なまえ" />
@@ -48,6 +53,11 @@
       <button id="btn-copy-code" class="btn-mini" title="コピー">コピー</button>
     </div>
   </header>
+
+  <button id="btn-open-avatar-lobby" class="avatar-picker-btn avatar-picker-btn-row" type="button">
+    <div class="avatar avatar-lg" id="lobby-avatar-preview"></div>
+    <span class="avatar-picker-label">自分のアイコンを変更</span>
+  </button>
 
   <ul id="lobby-players" class="lobby-players"></ul>
 
@@ -89,6 +99,9 @@
       <button id="btn-play" class="btn btn-primary hidden" disabled>出す</button>
     </div>
   </footer>
+
+  <!-- カードを出した瞬間、写真アイコンが画面中央にポップアップする演出 -->
+  <div id="center-avatar-pop" class="center-avatar-pop"></div>
 </section>
 
 <!-- Qボンバー選択モーダル -->
@@ -130,6 +143,30 @@
   </div>
 </div>
 
+<!-- アイコン設定モーダル -->
+<div id="modal-avatar" class="modal hidden">
+  <div class="modal-box avatar-modal-box">
+    <h3>アイコンを設定</h3>
+    <p>写真を選んで、ドラッグとズームで表示範囲を調整してください</p>
+    <div class="avatar-presets" id="avatar-presets"></div>
+    <div class="avatar-crop-outer">
+      <div class="avatar-crop-stage" id="avatar-crop-stage">
+        <img class="avatar-crop-photo" id="avatar-crop-photo" alt="" draggable="false" />
+        <p class="avatar-crop-empty" id="avatar-crop-empty">上の写真から選んでください</p>
+      </div>
+    </div>
+    <label class="avatar-zoom-field" id="avatar-zoom-field">
+      <span>ズーム</span>
+      <input type="range" id="avatar-zoom" min="100" max="300" value="100" />
+    </label>
+    <div class="avatar-modal-actions">
+      <button id="btn-avatar-clear" class="btn btn-ghost">イニシャルに戻す</button>
+      <button id="btn-avatar-cancel" class="btn btn-ghost">キャンセル</button>
+      <button id="btn-avatar-save" class="btn btn-primary" disabled>保存</button>
+    </div>
+  </div>
+</div>
+
 <!-- 自分のアイコンタップ：棄権確認モーダル -->
 <div id="modal-forfeit" class="modal hidden">
   <div class="modal-box">
@@ -145,6 +182,10 @@
   <div class="modal-box">
     <h3>ゲーム終了！</h3>
     <ol id="result-list" class="result-list"></ol>
+    <div id="loser-reveal" class="loser-reveal hidden">
+      <p id="loser-reveal-label"></p>
+      <div id="loser-reveal-cards" class="loser-reveal-cards"></div>
+    </div>
     <button id="btn-restart" class="btn btn-primary">もう一度プレイ</button>
     <button id="btn-back-lobby" class="btn btn-ghost">ロビーに戻る</button>
   </div>

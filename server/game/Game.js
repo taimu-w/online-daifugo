@@ -65,6 +65,7 @@ class Game extends EventEmitter {
     this.actionTimer = null;
     this.log = [];
     this.ended = false;
+    this.loserReveal = null; // 最下位が残していた手札（ゲーム終了時のみ設定）
 
     this._deal();
     const spade3Holder = this.players.find((p) => p.hand.some((c) => !c.joker && c.suit === 'S' && c.rank === 3));
@@ -167,6 +168,7 @@ class Game extends EventEmitter {
       log: this.log.slice(-30),
       ended: this.ended,
       finalRanking: this.ended ? this._rankingSummary() : null,
+      loserReveal: this.ended ? this.loserReveal : null,
     };
   }
 
@@ -592,6 +594,9 @@ class Game extends EventEmitter {
     if (active.length <= 1) {
       if (active.length === 1) {
         const last = active[0];
+        if (last.hand.length > 0) {
+          this.loserReveal = { playerId: last.id, name: last.name, cards: sortHand(last.hand.slice()) };
+        }
         last.status = 'finished';
         last.rank = this.nextTopRank <= this.nextBottomRank ? this.nextTopRank : this.nextBottomRank;
       }

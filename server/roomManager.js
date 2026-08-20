@@ -9,6 +9,30 @@ const DISCONNECT_GRACE_MS = 60 * 1000;
 const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 紛らわしい文字を除外
 const CUSTOM_ROOM_CODE_MAX_LENGTH = 20;
 
+// アイコン（プリセット写真）まわり。実URLはクライアント側の定数が持ち、
+// サーバーはID・パン・ズームの数値だけを中継する（なりすまし・不正な値の混入だけ弾く）。
+const AVATAR_IDS = new Set(['p1', 'p2', 'p3', 'p4', 'p5']);
+const AVATAR_SCALE_MIN = 1;
+const AVATAR_SCALE_MAX = 3;
+const AVATAR_OFFSET_LIMIT = 60; // クライアント側のクランプ計算に多少の余裕を持たせた上限
+
+function clampNumber(value, min, max, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
+function normalizeAvatar(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  if (!AVATAR_IDS.has(raw.avatarId)) return null;
+  return {
+    avatarId: raw.avatarId,
+    scale: clampNumber(raw.scale, AVATAR_SCALE_MIN, AVATAR_SCALE_MAX, 1),
+    offsetX: clampNumber(raw.offsetX, -AVATAR_OFFSET_LIMIT, AVATAR_OFFSET_LIMIT, 0),
+    offsetY: clampNumber(raw.offsetY, -AVATAR_OFFSET_LIMIT, AVATAR_OFFSET_LIMIT, 0),
+  };
+}
+
 function genId() {
   return crypto.randomBytes(12).toString('hex');
 }
@@ -38,10 +62,16 @@ class Room {
     return Array.from(this.players.values());
   }
 
-  addPlayer(name) {
+  addPlayer(name, avatar) {
     if (this.players.size >= MAX_PLAYERS) return { error: 'ルームが満員です（最大7人）' };
     const id = genId();
-    const player = { id, name: name || `プレイヤー${this.players.size + 1}`, connected: true, disconnectTimer: null };
+    const player = {
+      id,
+      name: name || `プレイヤー${this.players.size + 1}`,
+      connected: true,
+      disconnectTimer: null,
+      avatar: normalizeAvatar(avatar),
+    };
     this.players.set(id, player);
     if (!this.ownerId) this.ownerId = id;
     return { player };
@@ -49,6 +79,13 @@ class Room {
 
   getPlayer(id) {
     return this.players.get(id);
+  }
+
+  setAvatar(id, avatar) {
+    const player = this.players.get(id);
+    if (!player) return { ok: false, error: 'プレイヤーが見つかりません' };
+    player.avatar = normalizeAvatar(avatar);
+    return { ok: true };
   }
 
   clearDisconnectTimer(id) {
@@ -81,7 +118,7 @@ class Room {
       ownerId: this.ownerId,
       started: !!(this.game && !this.game.ended),
       gameOver: !!(this.game && this.game.ended),
-      players: this.playerList.map((p) => ({ id: p.id, name: p.name, connected: p.connected, isOwner: p.id === this.ownerId })),
+      players: this.playerList.map((p) => ({ id: p.id, name: p.name, connected: p.connected, isOwner: p.id === this.ownerId, avatar: p.avatar })),
       minPlayers: MIN_PLAYERS,
       maxPlayers: MAX_PLAYERS,
     };

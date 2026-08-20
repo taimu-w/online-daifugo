@@ -50,13 +50,13 @@ io.on('connection', (socket) => {
     return { room, player };
   }
 
-  socket.on('room:create', ({ name, roomCode } = {}) => {
+  socket.on('room:create', ({ name, roomCode, avatar } = {}) => {
     const { room, error: roomError } = manager.createRoom(roomCode);
     if (roomError) {
       socket.emit('error', { message: roomError });
       return;
     }
-    const { player, error } = room.addPlayer(name);
+    const { player, error } = room.addPlayer(name, avatar);
     if (error) {
       socket.emit('error', { message: error });
       return;
@@ -69,7 +69,7 @@ io.on('connection', (socket) => {
     broadcastLobby(room);
   });
 
-  socket.on('room:join', ({ roomCode, name } = {}) => {
+  socket.on('room:join', ({ roomCode, name, avatar } = {}) => {
     const room = manager.getRoom(roomCode);
     if (!room) {
       socket.emit('error', { message: 'ルームが見つかりません' });
@@ -79,7 +79,7 @@ io.on('connection', (socket) => {
       socket.emit('error', { message: 'ゲーム中は参加できません' });
       return;
     }
-    const { player, error } = room.addPlayer(name);
+    const { player, error } = room.addPlayer(name, avatar);
     if (error) {
       socket.emit('error', { message: error });
       return;
@@ -135,6 +135,13 @@ io.on('connection', (socket) => {
     broadcastLobby(room);
     if (room.game) broadcastGame(room);
     manager.deleteRoomIfEmpty(room.code);
+  });
+
+  socket.on('player:avatar', ({ avatar } = {}) => {
+    const { room, player } = getRoomAndPlayer();
+    if (!room || !player) return;
+    room.setAvatar(player.id, avatar);
+    broadcastLobby(room);
   });
 
   socket.on('game:play', ({ cardIds, stairsChoice } = {}) => {

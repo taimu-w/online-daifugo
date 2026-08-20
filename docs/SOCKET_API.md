@@ -10,11 +10,12 @@
 
 | イベント | ペイロード | 説明 |
 |---|---|---|
-| `room:create` | `{ name: string, roomCode?: string }` | 新規ルームを作成し、自分がオーナーとして参加する。`roomCode` を指定するとそのIDでルームを作成（大文字に正規化、20文字以内、重複時は`error`）。省略時はランダムな6文字コードを自動生成 |
-| `room:join` | `{ roomCode: string, name: string }` | 既存ルームに参加する。対戦中（`ended`でない）のルームには参加不可 |
+| `room:create` | `{ name: string, roomCode?: string, avatar?: Avatar \| null }` | 新規ルームを作成し、自分がオーナーとして参加する。`roomCode` を指定するとそのIDでルームを作成（大文字に正規化、20文字以内、重複時は`error`）。省略時はランダムな6文字コードを自動生成 |
+| `room:join` | `{ roomCode: string, name: string, avatar?: Avatar \| null }` | 既存ルームに参加する。対戦中（`ended`でない）のルームには参加不可 |
 | `room:rejoin` | `{ roomCode: string, playerId: string }` | 切断・リロード後の復帰。`localStorage` に保存したセッションから自動送信される |
 | `room:start` | なし | ゲーム開始（オーナーのみ、2人以上必要）。結果画面からの「もう一度プレイ」もこのイベントを再送する |
 | `room:leave` | なし | ルーム退出。対戦中なら `voluntaryLeave` 扱いで即座に最下位確定 |
+| `player:avatar` | `{ avatar: Avatar \| null }` | 自分のアイコン（プリセット写真＋パン・ズーム）を変更する。ロビー・対戦中いつでも送信可能。サーバーは値を正規化して `room:state` を再送するのみで、ゲームロジックには一切関与しない |
 
 ### ゲーム系
 
@@ -58,11 +59,21 @@
   ownerId: string | null,
   started: boolean,   // ゲーム中か
   gameOver: boolean,  // ゲームが終了し結果画面を出すべきか
-  players: { id, name, connected, isOwner }[],
+  players: { id, name, connected, isOwner, avatar: Avatar | null }[],
   minPlayers: 2,
   maxPlayers: 7,
 }
 ```
+
+### Avatar
+
+```ts
+{ avatarId: 'p1'|'p2'|'p3'|'p4'|'p5', scale: number, offsetX: number, offsetY: number }
+```
+
+- プリセット写真5枚のうちどれを使うか（`avatarId`）と、パン・ズームの調整値。実際の画像URLはサーバーに渡らず、`public/main.js` の `PRESET_AVATARS` 定数がクライアント側だけで持つ（サーバーは `avatarId` が既知の5値かどうかしか見ない）。
+- `scale` は1〜3、`offsetX` / `offsetY` は円形バッジ内でのパン位置（%、クライアント側でクランプ計算に使う値）。サーバーは範囲外の値やレコード形状が不正な場合、防御的に丸めるか `null` に正規化する。
+- `avatar` が `null` のプレイヤーは、`public/main.js` 側で名前の頭文字による従来のイニシャルバッジにフォールバックする（ゲームロジックとは無関係の表示専用データなので `Game.js`/`game:state` は関知しない。同一プレイヤーの `avatar` は `game:state` ではなく `room:state`（`players[].avatar`）経由で全員に伝わり、`public/main.js` がプレイヤーIDをキーに `game:state` の描画へマージする）。
 
 ### PublicGameState（`game:state`、`Game.getPublicState(viewerId)`）
 
@@ -84,6 +95,7 @@
   log: { message: string, at: number }[],  // 直近30件
   ended: boolean,
   finalRanking: { id, name, rank, status }[] | null,  // ended時のみ
+  loserReveal: { playerId, name, cards: Card[] } | null,  // ended時、最下位が残していた手札（全員に公開）。手札0枚で終局した場合はnull
 }
 ```
 
