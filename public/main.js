@@ -9,9 +9,11 @@ const ALL_NORMAL_RANKS = [14,15,3,4,5,6,7,8,9,10,11,12,13]; // A,2,3..K の順�
 const PRESET_AVATARS = [
   { id: 'p1', url: 'https://res.cloudinary.com/mudnpbqy/image/upload/v1787212438/LINE_ALBUM_%E3%81%AF%E3%82%8B%E3%81%8D_%E6%9F%B4__260820_1.jpg' },
   { id: 'p2', url: 'https://res.cloudinary.com/mudnpbqy/image/upload/v1787212496/LINE_ALBUM_%E3%82%8A%E3%82%87%E3%81%86%E3%81%9F_260820_1.jpg' },
-  { id: 'p3', url: 'https://res.cloudinary.com/mudnpbqy/image/upload/v1787212496/LINE_ALBUM_%E3%82%8A%E3%82%87%E3%81%86%E3%81%9F_260821_1.jpg' },
-  { id: 'p4', url: 'https://res.cloudinary.com/mudnpbqy/image/upload/v1787212496/LINE_ALBUM_%E3%82%8A%E3%82%87%E3%81%86%E3%81%9F_260822_1.jpg' },
-  { id: 'p5', url: 'https://res.cloudinary.com/mudnpbqy/image/upload/v1787212496/LINE_ALBUM_%E3%82%8A%E3%82%87%E3%81%86%E3%81%9F_260823_1.jpg' },
+  { id: 'p3', url: 'https://res.cloudinary.com/mudnpbqy/image/upload/v1787220849/LINE_ALBUM_%E3%81%BE%E3%81%95%E3%81%B2%E3%81%A8_260820_1.jpg' },
+  { id: 'p4', url: 'https://res.cloudinary.com/mudnpbqy/image/upload/v1787220825/LINE_ALBUM_%E3%81%9F%E3%81%84%E3%82%80_260820_1.jpg' },
+  { id: 'p5', url: 'https://res.cloudinary.com/mudnpbqy/image/upload/v1787220819/LINE_ALBUM_%E3%81%93%E3%81%86%E3%81%8D_260820_1.jpg' },
+  { id: 'p6', url: 'https://res.cloudinary.com/mudnpbqy/image/upload/v1787220809/LINE_ALBUM_%E3%82%88%E3%81%86%E3%81%99%E3%81%91_260820_1.jpg' },
+  { id: 'p7', url: 'https://res.cloudinary.com/mudnpbqy/image/upload/v1787220802/LINE_ALBUM_%E3%81%AF%E3%82%8B%E3%81%8D_%E8%97%A4__260820_1.jpg' },
 ];
 const PRESET_AVATAR_MAP = Object.fromEntries(PRESET_AVATARS.map((a) => [a.id, a.url]));
 
