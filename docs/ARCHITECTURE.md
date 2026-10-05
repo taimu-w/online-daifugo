@@ -17,7 +17,8 @@ server/roomManager.js … ルーム（ロビー）の作成・参加・退出・
 server/game/Game.js    … 1ゲームの状態機械（手札・場・革命・順位…すべて）
    │
    ├─ server/game/cards.js         … カード定義、強さ計算、山札生成
-   └─ server/game/handEvaluator.js … 役判定（単体/複数/階段）と役の強弱比較
+   ├─ server/game/handEvaluator.js … 役判定（単体/複数/階段）と役の強弱比較
+   └─ server/game/classRules.js    … 階級制（連続対戦オプション）の階級判定・カード交換プラン算出
 ```
 
 **責務分担の原則（仕様書12章準拠）**: ゲームロジックの判定・状態管理はすべてサーバー（`Game.js`）が行う。クライアント（`public/main.js`）はサーバーから受け取った状態を描画し、操作をイベントとしてサーバーに送るだけで、勝敗判定やルール判定は一切行わない。
@@ -36,6 +37,7 @@ server/game/Game.js    … 1ゲームの状態機械（手札・場・革命・�
 - `Room`: 参加者リスト、オーナー、ゲームインスタンスを保持。オーナー退出時の自動移譲（`transferOwnerIfNeeded`）、最大7人/最小2人などロビー側のルールはここに閉じている。
 - ゲームが始まると `Room.game`（`Game`インスタンス）を1つ保持する。ゲーム終了後も`Room`は保持され続け、「もう一度プレイ」で同じルームに新しい`Game`を生成し直す（仕様書2章の「ゲーム状態は毎回初期化」に対応）。
 - プレイヤーのアイコン（`avatar`: プリセット写真ID＋パン/ズーム）も `Room.players` の各エントリが保持する。表示専用のデータで判定に一切使わないため、あえて `Game.js` には持ち込まず `Room`（ロビー層）止まりにしている。`player:avatar` イベントで対戦中でも更新でき、`lobbyState()` 経由で全員にブロードキャストされる（[docs/SOCKET_API.md](SOCKET_API.md) 参照）。
+- `Room.classRule` / `Room.miyakoOchi`: 連続対戦オプション（階級制・都落ち）のオン/オフ。`setOptions()` でオーナーのみ・非対戦中のみ変更可。`Room.lastRanking`（直前ゲームの順位）と `Room.tributeBoostPlayerId`（都落ちにより次回献上3枚になるプレイヤー）を保持し、`startGame()` で前回結果から階級・カード交換プランを組み立てて `Game` に渡す。`gameEnd` イベント購読側（`server/index.js#wireGame`）が `Room.recordGameResult(ranking, game.enteredClasses)` を呼び、次回分の `lastRanking` / `tributeBoostPlayerId` を更新する。階級判定・交換プラン算出の純粋関数は `server/game/classRules.js` に分離。詳細は後述の「階級制・都落ち（連続対戦オプション）」を参照。
 
 ### `server/game/cards.js`
 - ランクを **3〜15の数値** で表現する（3=3, …, 11=J, 12=Q, 13=K, 14=A, 15=2）。この並びにしておくと「通常時の強さ＝数値の昇順」に一致し、革命時は `18 - rank` で反転できる。
@@ -123,10 +125,26 @@ server/game/Game.js    … 1ゲームの状態機械（手札・場・革命・�
 | Qボンバー選択 | 60秒 | ランダムな数字を必要数選択 |
 | 7わたし選択 | 60秒 | 手札の先頭からランダムな相手へ配布 |
 | 10捨て選択 | 60秒 | 手札からランダムに必要数を選択して捨てる |
+| カード交換（階級制）の下賜選択 | 60秒 | 手札から最弱のカードを必要数自動選択 |
 
 切断から60秒（`DISCONNECT_GRACE_MS`、`server/roomManager.js`で定義）経過すると自動的に `autoMode` が有効になり、以後は毎ターンのタイムアウト処理（自動パス等）に従って進行する。再接続すると `autoMode` は解除される。
+
+### 階級制・都落ち（連続対戦オプション）
+
+`Room.classRule` / `Room.miyakoOchi` がオンのとき、`Room.startGame` は前回の `lastRanking`（順位）から `server/game/classRules.js#assignClasses` で階級（`daifugo`/`fugo`/`heimin`/`hinmin`/`daihinmin`）を算出し、`buildExchangePlan` でカード交換プラン（誰が誰へ何枚献上し、何枚下賜するか）を組み立てて `new Game(roster, { exchangePlan, enteredClasses, firstPlayerId })` に渡す。直前ゲームと参加メンバーの集合が完全一致しない場合は交換なしで通常開始する（`Room.startGame` 内でチェック）。
+
+`Game` 側の処理（`_deal()` の直後、通常のターン開始より前に割り込む）:
+
+1. `_applyForcedTributes`: 貧民/大貧民の最強カードを`tributeCount`枚、強制的に富豪/大富豪の手札へ移動（選択の余地なし）。
+2. 富豪・大富豪が下賜する`returnCount`枚を選ぶための `pendingAction`（`type: 'classExchange'`）を`exchangeQueue`から1件ずつ取り出してセット。既存の `pendingQueue`（Qボンバー等）と同じ「1件ずつ解決してから次へ」というパターンを踏襲している（`_advanceExchangeQueue`）。この間、`playCards` / `pass` は既存の `pendingAction` ガードでブロックされる。
+3. `resolveClassExchange(playerId, cardIds)` で下賜カードを確定 → キューが空になったら `_beginPlay(firstPlayerId)` で通常のターン進行を開始する（`firstPlayerId` は前回の大貧民。階級制でなければ通常どおり♠3所持者が先手）。
+
+**都落ち**: 前回`daifugo`だったプレイヤーが今回`daihinmin`（最下位）になった場合、`Room.recordGameResult`（`gameEnd` 時に `server/index.js#wireGame` から呼ばれる）が `tributeBoostPlayerId` にそのプレイヤーIDをセットする。次回の交換プラン算出時、そのプレイヤーが献上する側（`daihinmin`）に該当すれば献上枚数が2枚→3枚に増える（下賜は常に2枚のまま、富豪⇔貧民間には影響しない）。
+
+`Game.enteredClasses`（`Map<playerId, class>`）はこのゲーム開始時点の階級で、`getPublicState` では各プレイヤーの `class` として公開する（都落ち判定・UIバッジ表示用）。
 
 ## 補足: 仕様書からの拡張・解釈
 
 - **10捨て**: `大富豪_要件仕様書_v1.1.md` には明記されていないが、現在の実装には「10を出すと出した枚数分だけ手札から任意のカードを捨てられる」ローカルルールが実装済み（`server/game/Game.js` の `resolveTenDiscard` 系）。ルール追加・変更時は README と本書の両方を更新すること。
+- **階級制・都落ち**: 同じく仕様書には明記されていない連続対戦オプション。詳細はREADMEの該当セクションと上記「階級制・都落ち（連続対戦オプション）」を参照。
 - そのほかの仕様上あいまいな箇所への解釈は [README.md](../README.md) の「実装上の補足」セクションを参照。

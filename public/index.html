@@ -61,6 +61,29 @@
 
   <ul id="lobby-players" class="lobby-players"></ul>
 
+  <div class="lobby-options">
+    <div class="option-row">
+      <div class="option-text">
+        <div class="option-label">階級制</div>
+        <div class="option-desc">連続対戦で前回の順位に応じたカード交換を行う</div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="toggle-class-rule" />
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div class="option-row" id="row-miyako-ochi">
+      <div class="option-text">
+        <div class="option-label">都落ち</div>
+        <div class="option-desc">前回大富豪が今回大貧民に転落したら、次回の献上が3枚に増加</div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="toggle-miyako-ochi" />
+        <span class="slider"></span>
+      </label>
+    </div>
+  </div>
+
   <p id="lobby-hint" class="hint"></p>
 
   <div class="lobby-actions">
@@ -131,6 +154,16 @@
     <p id="ten-desc"></p>
     <div id="ten-cards" class="chip-grid"></div>
     <button id="btn-ten-confirm" class="btn btn-primary" disabled>決定</button>
+  </div>
+</div>
+
+<!-- カード交換（階級制）返却カード選択モーダル -->
+<div id="modal-exchange" class="modal hidden">
+  <div class="modal-box">
+    <h3>カード交換</h3>
+    <p id="exchange-desc"></p>
+    <div id="exchange-cards" class="chip-grid"></div>
+    <button id="btn-exchange-confirm" class="btn btn-primary" disabled>決定</button>
   </div>
 </div>
 

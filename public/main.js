@@ -4,6 +4,10 @@ const SUIT_MARK = { S: '♠', H: '♥', D: '♦', C: '♣' };
 const RANK_LABEL = { 3:'3',4:'4',5:'5',6:'6',7:'7',8:'8',9:'9',10:'10',11:'J',12:'Q',13:'K',14:'A',15:'2' };
 const ALL_NORMAL_RANKS = [14,15,3,4,5,6,7,8,9,10,11,12,13]; // A,2,3..K の順で表示
 
+// 階級制（連続対戦オプション）の表示ラベル。平民はバッジを表示しない。
+const CLASS_LABEL = { daifugo: '大富豪', fugo: '富豪', hinmin: '貧民', daihinmin: '大貧民' };
+const CLASS_ICON = { daifugo: '👑', fugo: '🥂', hinmin: '💦', daihinmin: '💀' };
+
 // プリセットアイコン写真。実URLはここだけが持ち、サーバーには avatarId しか送らない
 // （なりすまし防止・軽量化のため。詳細は docs/SOCKET_API.md の Avatar 参照）。
 const PRESET_AVATARS = [
@@ -33,6 +37,7 @@ let qbomberPicked = new Set();
 let sevenSelected = []; // cardId の配列（選択順）
 let sevenAssign = {};   // cardId -> toPlayerId
 let tenSelected = [];   // cardId の配列（選択順）
+let exchangeSelected = []; // cardId の配列（選択順、カード交換で返す側）
 
 let resultModalOpenedFor = null; // 二重表示防止
 
@@ -411,7 +416,22 @@ function renderLobby(state) {
   if (!isOwner) hint.textContent = 'ルームオーナーの開始を待っています';
   else if (connectedCount < state.minPlayers) hint.textContent = `開始には あと${state.minPlayers - connectedCount}人 必要です`;
   else hint.textContent = `${state.players.length}人 参加中（最大${state.maxPlayers}人）`;
+
+  const classToggle = $('#toggle-class-rule');
+  const miyakoToggle = $('#toggle-miyako-ochi');
+  classToggle.checked = !!state.classRule;
+  classToggle.disabled = !isOwner;
+  miyakoToggle.checked = !!state.miyakoOchi;
+  miyakoToggle.disabled = !isOwner || !state.classRule;
+  $('#row-miyako-ochi').classList.toggle('disabled', !state.classRule);
 }
+
+$('#toggle-class-rule').addEventListener('change', (e) => {
+  socket.emit('room:options', { classRule: e.target.checked });
+});
+$('#toggle-miyako-ochi').addEventListener('change', (e) => {
+  socket.emit('room:options', { miyakoOchi: e.target.checked });
+});
 
 $('#btn-start-game').addEventListener('click', () => socket.emit('room:start'));
 $('#btn-leave-room').addEventListener('click', () => {
@@ -526,6 +546,10 @@ function renderTop(state) {
       const b = el('div', 'pbadge' + (medal ? ' medal' : ''), medal || `${p.rank}位`);
       chip.appendChild(b);
     }
+    if (p.class && CLASS_LABEL[p.class]) {
+      const clsBadge = el('div', `class-badge class-${p.class}`, `${CLASS_ICON[p.class]}${CLASS_LABEL[p.class]}`);
+      chip.appendChild(clsBadge);
+    }
     const avatarWrap = el('div', 'avatar-wrap');
     const ring = el('div', 'avatar-ring');
     const avatar = el('div', 'avatar');
@@ -580,6 +604,12 @@ function renderSpecialBanner(state) {
     text = state.pendingAction.by === myPlayerId
       ? `10捨て！ 手札から${state.pendingAction.count}枚選んで捨ててください`
       : `${byName} さんが10捨て選択中...`;
+  } else if (state.pendingAction.type === 'classExchange') {
+    const target = state.players.find((p) => p.id === state.pendingAction.targetId);
+    const targetName = target ? target.name : '';
+    text = state.pendingAction.by === myPlayerId
+      ? `カード交換！ ${targetName} さんへ返すカードを${state.pendingAction.count}枚選んでください`
+      : `${byName} さんがカード交換で返すカードを選択中...`;
   }
   banner.textContent = text;
   banner.classList.remove('hidden');
@@ -635,6 +665,7 @@ const LOG_CATEGORIES = [
   { test: /7わたし|渡しました/, cat: 'special', icon: '🎁' },
   { test: /10捨て|廃棄/, cat: 'special', icon: '🗑️' },
   { test: /♠3返し/, cat: 'special', icon: '↩️' },
+  { test: /カード交換|献上|返却/, cat: 'special', icon: '🔁' },
   { test: /場が流れました/, cat: 'clear', icon: '🌊' },
   { test: /時間切れ/, cat: 'timeout', icon: '⏰' },
   { test: /パスしました/, cat: 'pass', icon: '💨' },
@@ -690,6 +721,7 @@ function renderHand(state) {
   wrap.innerHTML = '';
   const inSevenMode = state.pendingAction && state.pendingAction.type === 'sevenGive' && state.pendingAction.by === myPlayerId;
   const inTenMode = state.pendingAction && state.pendingAction.type === 'tenDiscard' && state.pendingAction.by === myPlayerId;
+  const inExchangeMode = state.pendingAction && state.pendingAction.type === 'classExchange' && state.pendingAction.by === myPlayerId;
 
   for (const card of state.myHand) {
     if (inSevenMode) {
@@ -703,6 +735,12 @@ function renderHand(state) {
       wrap.appendChild(renderCardEl(card, {
         selected: picked,
         onClick: () => toggleTenCard(card.id, state.pendingAction.count),
+      }));
+    } else if (inExchangeMode) {
+      const picked = exchangeSelected.includes(card.id);
+      wrap.appendChild(renderCardEl(card, {
+        selected: picked,
+        onClick: () => toggleExchangeCard(card.id, state.pendingAction.count),
       }));
     } else {
       const selected = selectedCardIds.has(card.id);
@@ -799,6 +837,15 @@ function renderPendingModals(state) {
   } else {
     tModal.classList.add('hidden');
     tenSelected = [];
+  }
+
+  const eModal = $('#modal-exchange');
+  if (pending && pending.type === 'classExchange' && pending.by === myPlayerId) {
+    eModal.classList.remove('hidden');
+    renderExchangeModal(state, pending);
+  } else {
+    eModal.classList.add('hidden');
+    exchangeSelected = [];
   }
 }
 
@@ -914,6 +961,37 @@ function renderTenModal(state, pending) {
 $('#btn-ten-confirm').addEventListener('click', () => {
   socket.emit('game:tenDiscard', { cardIds: tenSelected.slice() });
   tenSelected = [];
+});
+
+// ---------- カード交換（階級制） モーダル ----------
+
+function toggleExchangeCard(cardId, count) {
+  const idx = exchangeSelected.indexOf(cardId);
+  if (idx >= 0) {
+    exchangeSelected.splice(idx, 1);
+  } else {
+    if (exchangeSelected.length >= count) return;
+    exchangeSelected.push(cardId);
+  }
+  renderGame(latestGame);
+}
+
+function renderExchangeModal(state, pending) {
+  const target = state.players.find((p) => p.id === pending.targetId);
+  $('#exchange-desc').textContent = `${target ? target.name : ''} さんへ返すカードを${pending.count}枚、下の手札から選んでください（${exchangeSelected.length}/${pending.count}枚 選択中）`;
+  const wrap = $('#exchange-cards');
+  wrap.innerHTML = '';
+  for (const cardId of exchangeSelected) {
+    const card = state.myHand.find((c) => c.id === cardId);
+    if (!card) continue;
+    wrap.appendChild(renderCardEl(card, { small: true }));
+  }
+  $('#btn-exchange-confirm').disabled = exchangeSelected.length !== pending.count;
+}
+
+$('#btn-exchange-confirm').addEventListener('click', () => {
+  socket.emit('game:classExchange', { cardIds: exchangeSelected.slice() });
+  exchangeSelected = [];
 });
 
 // ---------- 結果画面 ----------

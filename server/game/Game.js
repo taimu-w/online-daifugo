@@ -1,13 +1,14 @@
 'use strict';
 
 const EventEmitter = require('events');
-const { createDeck, shuffle, JOKER_RANK, isStrongestNormalRank, sortHand, rankLabel, cardLabel } = require('./cards');
+const { createDeck, shuffle, JOKER_RANK, isStrongestNormalRank, cardEffectiveValue, sortHand, rankLabel, cardLabel } = require('./cards');
 const { classifyHand, canBeat } = require('./handEvaluator');
 
 const TURN_TIMEOUT_MS = 60 * 1000;
 const QBOMBER_TIMEOUT_MS = 60 * 1000;
 const SEVEN_TIMEOUT_MS = 60 * 1000;
 const TEN_DISCARD_TIMEOUT_MS = 60 * 1000;
+const CLASS_EXCHANGE_TIMEOUT_MS = 60 * 1000;
 
 const ALL_NORMAL_RANKS = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
 
@@ -31,9 +32,13 @@ function intersectSets(a, b) {
 }
 
 class Game extends EventEmitter {
-  constructor(players) {
+  constructor(players, options = {}) {
     // players: [{id, name}]
+    // options.exchangePlan: 階級制のカード交換プラン（server/game/classRules.js#buildExchangePlan の戻り値）。nullなら交換なし。
+    // options.enteredClasses: Map<playerId, class> このゲームに入る時点の階級（都落ち判定用に外部へ公開する）。
+    // options.firstPlayerId: 階級制で先手を上書きする場合のプレイヤーID（通常は前回の大貧民）。
     super();
+    const { exchangePlan = null, enteredClasses = null, firstPlayerId = null } = options;
     this.players = players.map((p, i) => ({
       id: p.id,
       name: p.name,
@@ -43,6 +48,7 @@ class Game extends EventEmitter {
       seatIndex: i,
       connected: true,
       autoMode: false,
+      playerClass: enteredClasses ? enteredClasses.get(p.id) || null : null,
     }));
     this.seatOrder = this.players.map((p) => p.id);
     this.totalPlayers = this.players.length;
@@ -61,6 +67,10 @@ class Game extends EventEmitter {
     this.pendingAction = null; // {type, by, count, deadline, ...}
     this.finalContext = null;
 
+    this.enteredClasses = enteredClasses; // Room が都落ち判定に使う（このゲーム開始時点の階級）
+    this.exchangeQueue = [];
+    this._exchangeFirstPlayerId = firstPlayerId;
+
     this.turnTimer = null;
     this.actionTimer = null;
     this.log = [];
@@ -68,10 +78,27 @@ class Game extends EventEmitter {
     this.loserReveal = null; // 最下位が残していた手札（ゲーム終了時のみ設定）
 
     this._deal();
-    const spade3Holder = this.players.find((p) => p.hand.some((c) => !c.joker && c.suit === 'S' && c.rank === 3));
-    this.currentPlayerId = spade3Holder ? spade3Holder.id : this.seatOrder[0];
+
+    if (exchangePlan && exchangePlan.length > 0) {
+      this._applyForcedTributes(exchangePlan);
+      this.exchangeQueue = exchangePlan.map((p) => ({ chooserId: p.receiverId, targetId: p.giverId, count: p.returnCount }));
+      this._advanceExchangeQueue();
+    } else {
+      this._beginPlay(firstPlayerId);
+    }
+  }
+
+  _beginPlay(firstPlayerId) {
+    const preferred = firstPlayerId ? this.getPlayer(firstPlayerId) : null;
+    if (preferred && preferred.status === 'active') {
+      this.currentPlayerId = preferred.id;
+    } else {
+      const spade3Holder = this.players.find((p) => p.hand.some((c) => !c.joker && c.suit === 'S' && c.rank === 3));
+      this.currentPlayerId = spade3Holder ? spade3Holder.id : this.seatOrder[0];
+    }
     this._pushLog(`ゲーム開始。${this.getPlayer(this.currentPlayerId).name} のターンです。`);
     this._startTurnTimer();
+    this.emit('update');
   }
 
   // ---------- 基本ユーティリティ ----------
@@ -151,6 +178,7 @@ class Game extends EventEmitter {
         connected: p.connected,
         autoMode: p.autoMode,
         isCurrentTurn: p.id === this.currentPlayerId,
+        class: p.playerClass,
       })),
       field: {
         cards: this.field.cards,
@@ -338,6 +366,84 @@ class Game extends EventEmitter {
     this.chain.mandatorySuits = null;
     this.jbackActive = false;
     this.passCount = 0;
+  }
+
+  // ---------- カード交換（階級制、連続対戦オプション） ----------
+
+  _takeStrongestCards(hand, count) {
+    return hand.slice().sort((a, b) => cardEffectiveValue(b, false) - cardEffectiveValue(a, false)).slice(0, Math.min(count, hand.length));
+  }
+
+  _takeWeakestCards(hand, count) {
+    return hand.slice().sort((a, b) => cardEffectiveValue(a, false) - cardEffectiveValue(b, false)).slice(0, Math.min(count, hand.length));
+  }
+
+  // 献上（貧民/大貧民 → 富豪/大富豪）は選択の余地なく強制的に最強カードが渡る
+  _applyForcedTributes(exchangePlan) {
+    for (const p of exchangePlan) {
+      const giver = this.getPlayer(p.giverId);
+      const receiver = this.getPlayer(p.receiverId);
+      if (!giver || !receiver) continue;
+      const taken = this._takeStrongestCards(giver.hand, p.tributeCount);
+      const takenIds = new Set(taken.map((c) => c.id));
+      giver.hand = giver.hand.filter((c) => !takenIds.has(c.id));
+      receiver.hand = sortHand(receiver.hand.concat(taken));
+      this._pushLog(`【カード交換】${giver.name} → ${receiver.name} へ ${taken.map((c) => cardLabel(c)).join('、')} を献上`);
+    }
+  }
+
+  _advanceExchangeQueue() {
+    if (this.exchangeQueue.length === 0) {
+      this._beginPlay(this._exchangeFirstPlayerId);
+      return;
+    }
+    const next = this.exchangeQueue.shift();
+    const chooser = this.getPlayer(next.chooserId);
+    const target = this.getPlayer(next.targetId);
+    const maxCount = Math.min(next.count, chooser.hand.length);
+    this.pendingAction = {
+      type: 'classExchange',
+      by: next.chooserId,
+      targetId: next.targetId,
+      count: maxCount,
+      deadline: Date.now() + CLASS_EXCHANGE_TIMEOUT_MS,
+    };
+    this._pushLog(`${chooser.name} が ${target.name} へ返すカードを${maxCount}枚選択中...`);
+    if (maxCount === 0) {
+      this.pendingAction = null;
+      this._advanceExchangeQueue();
+      return;
+    }
+    this._clearActionTimer();
+    this.actionTimer = setTimeout(() => this._handleActionTimeout(), CLASS_EXCHANGE_TIMEOUT_MS);
+    this.emit('update');
+  }
+
+  resolveClassExchange(playerId, cardIds) {
+    if (this.ended) return { ok: false, error: 'ゲームは終了しています' };
+    if (!this.pendingAction || this.pendingAction.type !== 'classExchange') return { ok: false, error: '対象の操作がありません' };
+    if (this.pendingAction.by !== playerId) return { ok: false, error: '選択権がありません' };
+    const chooser = this.getPlayer(playerId);
+    const needed = this.pendingAction.count;
+    const uniqIds = Array.from(new Set(cardIds || []));
+    if (uniqIds.length !== needed) return { ok: false, error: `${needed}枚を選択してください` };
+    for (const id of uniqIds) {
+      if (!chooser.hand.some((c) => c.id === id)) return { ok: false, error: '手札にないカードです' };
+    }
+    this._clearActionTimer();
+    this._applyClassExchangeReturn(chooser, this.pendingAction.targetId, uniqIds);
+    this.pendingAction = null;
+    this._advanceExchangeQueue();
+    return { ok: true };
+  }
+
+  _applyClassExchangeReturn(chooser, targetId, cardIds) {
+    const target = this.getPlayer(targetId);
+    const idSet = new Set(cardIds);
+    const moved = chooser.hand.filter((c) => idSet.has(c.id));
+    chooser.hand = chooser.hand.filter((c) => !idSet.has(c.id));
+    target.hand = sortHand(target.hand.concat(moved));
+    this._pushLog(`【カード交換】${chooser.name} → ${target.name} へ ${moved.map((c) => cardLabel(c)).join('、')} を返却`);
   }
 
   // ---------- Qボンバー ----------
@@ -532,6 +638,13 @@ class Game extends EventEmitter {
       this._applyTenDiscard(discarder, cardIds);
       this.pendingAction = null;
       this._advancePendingQueue();
+    } else if (this.pendingAction.type === 'classExchange') {
+      const chooser = this.getPlayer(this.pendingAction.by);
+      const weakest = this._takeWeakestCards(chooser.hand, this.pendingAction.count);
+      this._pushLog('カード交換：時間切れのため自動選択');
+      this._applyClassExchangeReturn(chooser, this.pendingAction.targetId, weakest.map((c) => c.id));
+      this.pendingAction = null;
+      this._advanceExchangeQueue();
     }
     this.emit('update');
   }

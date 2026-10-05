@@ -2,6 +2,7 @@
 
 const crypto = require('crypto');
 const Game = require('./game/Game');
+const { assignClasses, buildExchangePlan } = require('./game/classRules');
 
 const MAX_PLAYERS = 7;
 const MIN_PLAYERS = 2;
@@ -56,6 +57,13 @@ class Room {
     this.ownerId = null;
     this.game = null;
     this.createdAt = Date.now();
+
+    // 連続対戦オプション（階級制・都落ち）。オーナーがロビーでいつでもトグルでき、
+    // 「もう一度プレイ」時に前回の結果を引き継いでカード交換を行う。
+    this.classRule = false;
+    this.miyakoOchi = false;
+    this.lastRanking = null; // [{id, rank}] 直前に終了したゲームの結果（このルームで一度も終わっていなければnull）
+    this.tributeBoostPlayerId = null; // 都落ち発生時、次回の献上を3枚に増やすプレイヤーID
   }
 
   get playerList() {
@@ -121,7 +129,18 @@ class Room {
       players: this.playerList.map((p) => ({ id: p.id, name: p.name, connected: p.connected, isOwner: p.id === this.ownerId, avatar: p.avatar })),
       minPlayers: MIN_PLAYERS,
       maxPlayers: MAX_PLAYERS,
+      classRule: this.classRule,
+      miyakoOchi: this.miyakoOchi,
     };
+  }
+
+  setOptions(byPlayerId, { classRule, miyakoOchi } = {}) {
+    if (byPlayerId !== this.ownerId) return { ok: false, error: 'ルームオーナーのみ設定を変更できます' };
+    if (this.game && !this.game.ended) return { ok: false, error: 'ゲーム中は設定を変更できません' };
+    if (typeof classRule === 'boolean') this.classRule = classRule;
+    if (typeof miyakoOchi === 'boolean') this.miyakoOchi = miyakoOchi;
+    if (!this.classRule) this.miyakoOchi = false; // 階級制オフなら都落ちも無効化
+    return { ok: true };
   }
 
   canStart(byPlayerId) {
@@ -136,8 +155,41 @@ class Room {
     const check = this.canStart(byPlayerId);
     if (!check.ok) return check;
     const roster = this.playerList.filter((p) => p.connected).map((p) => ({ id: p.id, name: p.name }));
-    this.game = new Game(roster);
+
+    let exchangePlan = null;
+    let enteredClasses = null;
+    let firstPlayerId = null;
+
+    if (this.classRule && this.lastRanking) {
+      const rosterIds = new Set(roster.map((p) => p.id));
+      const lastIds = new Set(this.lastRanking.map((r) => r.id));
+      const sameRoster = rosterIds.size === lastIds.size && [...rosterIds].every((id) => lastIds.has(id));
+      if (sameRoster) {
+        const orderedIds = this.lastRanking.slice().sort((a, b) => a.rank - b.rank).map((r) => r.id);
+        enteredClasses = assignClasses(orderedIds);
+        const boostId = this.miyakoOchi ? this.tributeBoostPlayerId : null;
+        exchangePlan = buildExchangePlan(enteredClasses, boostId);
+        // 前回の大貧民が今回の先手（大貧民から始まるのが階級制の慣習）
+        for (const [id, cls] of enteredClasses) if (cls === 'daihinmin') firstPlayerId = id;
+      }
+    }
+
+    this.game = new Game(roster, { exchangePlan, enteredClasses, firstPlayerId });
     return { ok: true, game: this.game };
+  }
+
+  // ゲーム終了時に呼ぶ。次回の階級判定・都落ち判定のために結果を保存する。
+  recordGameResult(ranking, enteredClasses) {
+    this.lastRanking = ranking.map((r) => ({ id: r.id, rank: r.rank }));
+    this.tributeBoostPlayerId = null;
+    if (enteredClasses) {
+      const total = ranking.length;
+      for (const r of ranking) {
+        if (enteredClasses.get(r.id) === 'daifugo' && r.rank === total) {
+          this.tributeBoostPlayerId = r.id; // 都落ち発生：次回は献上3枚
+        }
+      }
+    }
   }
 }
 

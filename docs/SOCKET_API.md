@@ -16,6 +16,7 @@
 | `room:start` | なし | ゲーム開始（オーナーのみ、2人以上必要）。結果画面からの「もう一度プレイ」もこのイベントを再送する |
 | `room:leave` | なし | ルーム退出。対戦中なら `voluntaryLeave` 扱いで即座に最下位確定 |
 | `player:avatar` | `{ avatar: Avatar \| null }` | 自分のアイコン（プリセット写真＋パン・ズーム）を変更する。ロビー・対戦中いつでも送信可能。サーバーは値を正規化して `room:state` を再送するのみで、ゲームロジックには一切関与しない |
+| `room:options` | `{ classRule?: boolean, miyakoOchi?: boolean }` | 連続対戦オプション（階級制・都落ち）のオン/オフ。オーナーのみ・非対戦中のみ有効（`error`で拒否）。`classRule` をオフにすると `miyakoOchi` も自動でオフになる |
 
 ### ゲーム系
 
@@ -26,9 +27,10 @@
 | `game:qbomber` | `{ numbers: number[] }` | Qボンバーで捨てさせる数字を指定（ランク数値、下表参照） |
 | `game:sevenGive` | `{ allocation: { cardId: string, toPlayerId: string }[] }` | 7わたしで渡すカードと相手の組み合わせ |
 | `game:tenDiscard` | `{ cardIds: string[] }` | 10捨てで自分の手札から捨てるカード |
+| `game:classExchange` | `{ cardIds: string[] }` | 階級制のカード交換で、大富豪/富豪が大貧民/貧民へ返す（下賜する）カード |
 | `game:forfeit` | なし | ゲーム棄権（対戦中に即座に最下位確定。ルームからは退出しない） |
 
-`game:play` / `game:pass` / `game:qbomber` / `game:sevenGive` / `game:tenDiscard` はいずれも失敗時に `error` イベントで理由を返す（同期的な戻り値はない）。`game:play` のみ、階段のジョーカー割り当てが曖昧な場合は `error` の代わりに `game:needsChoice` を返す。
+`game:play` / `game:pass` / `game:qbomber` / `game:sevenGive` / `game:tenDiscard` / `game:classExchange` はいずれも失敗時に `error` イベントで理由を返す（同期的な戻り値はない）。`game:play` のみ、階段のジョーカー割り当てが曖昧な場合は `error` の代わりに `game:needsChoice` を返す。
 
 ## サーバー → クライアント
 
@@ -62,6 +64,8 @@
   players: { id, name, connected, isOwner, avatar: Avatar | null }[],
   minPlayers: 2,
   maxPlayers: 7,
+  classRule: boolean,   // 階級制オプションのオン/オフ
+  miyakoOchi: boolean,  // 都落ちオプションのオン/オフ（classRuleがfalseなら常にfalse）
 }
 ```
 
@@ -82,6 +86,7 @@
   players: {
     id, name, handCount, status,      // 'active'|'finished'|'foul'|'left'
     rank: number | null, connected, autoMode, isCurrentTurn,
+    class: 'daifugo'|'fugo'|'heimin'|'hinmin'|'daihinmin' | null, // 階級制が有効なゲームでのみ設定。このゲーム開始時点の階級で、ゲーム中は変化しない
   }[],
   field: { cards: Card[], kind: 'single'|'multi'|'stairs'|null, ownerId },
   revolution: boolean,
@@ -108,6 +113,8 @@
 { type: 'sevenGive', by: string, count: number, deadline: number }
 // 10捨て
 { type: 'tenDiscard', by: string, count: number, deadline: number }
+// カード交換（階級制）: by（大富豪/富豪）が targetId（大貧民/貧民）へ返すカードを count 枚選ぶ
+{ type: 'classExchange', by: string, targetId: string, count: number, deadline: number }
 ```
 
 `pendingAction` がセットされている間、`playCards` / `pass` は常に拒否される（特殊効果の解決が最優先）。
@@ -134,4 +141,12 @@ client → game:play { cardIds: ["S12"] }          // Qを1枚出す
 server → game:state（pendingAction: { type:'qbomber', count:1, by: 自分 }）
 client → game:qbomber { numbers: [15] }           // 2を指定
 server → game:state（pendingAction が null に戻り、全員の該当ランクが手札から消える）
+```
+
+**階級制でのカード交換（「もう一度プレイ」直後）**
+```
+client(オーナー) → room:start
+server → game:state（大貧民/貧民からの献上は済んだ状態で、pendingAction: { type:'classExchange', by: 大富豪, targetId: 大貧民, count:2 }）
+client(大富豪) → game:classExchange { cardIds: ["S3","H3"] }
+server → game:state（富豪⇔貧民の交換があれば続けて pendingAction がセットされる。すべて解決すると pendingAction は null に戻り、通常のターン進行が始まる）
 ```

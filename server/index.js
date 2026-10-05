@@ -33,7 +33,8 @@ function wireGame(room) {
   if (!game || wiredGames.has(game)) return;
   wiredGames.add(game);
   game.on('update', () => broadcastGame(room));
-  game.on('gameEnd', () => {
+  game.on('gameEnd', (ranking) => {
+    room.recordGameResult(ranking, game.enteredClasses);
     broadcastGame(room);
     broadcastLobby(room);
   });
@@ -144,6 +145,14 @@ io.on('connection', (socket) => {
     broadcastLobby(room);
   });
 
+  socket.on('room:options', ({ classRule, miyakoOchi } = {}) => {
+    const { room, player } = getRoomAndPlayer();
+    if (!room || !player) return;
+    const result = room.setOptions(player.id, { classRule, miyakoOchi });
+    if (!result.ok) return socket.emit('error', { message: result.error });
+    broadcastLobby(room);
+  });
+
   socket.on('game:play', ({ cardIds, stairsChoice } = {}) => {
     const { room, player } = getRoomAndPlayer();
     if (!room || !player || !room.game) return;
@@ -187,6 +196,13 @@ io.on('connection', (socket) => {
     const { room, player } = getRoomAndPlayer();
     if (!room || !player || !room.game) return;
     const result = room.game.resolveTenDiscard(player.id, cardIds || []);
+    if (!result.ok) socket.emit('error', { message: result.error });
+  });
+
+  socket.on('game:classExchange', ({ cardIds } = {}) => {
+    const { room, player } = getRoomAndPlayer();
+    if (!room || !player || !room.game) return;
+    const result = room.game.resolveClassExchange(player.id, cardIds || []);
     if (!result.ok) socket.emit('error', { message: result.error });
   });
 
