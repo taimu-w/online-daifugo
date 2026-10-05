@@ -723,13 +723,7 @@ function handMetrics(container) {
 
 // 左端の数字とマークが読める最小の見え幅
 function handMinSpacing(cardWidth) {
-  return Math.max(cardWidth * 0.3, 19);
-}
-
-// count枚を1行に並べたとき、最小の見え幅以上で収まるか
-function handRowFits(m, count) {
-  if (count <= 1) return true;
-  return (m.width - m.cardWidth) / (count - 1) >= handMinSpacing(m.cardWidth);
+  return Math.max(cardWidth * 0.32, 19);
 }
 
 function updateHandOverlap(container) {
@@ -741,27 +735,64 @@ function updateHandOverlap(container) {
   container.style.setProperty('--overlap', `${spacing - m.cardWidth}px`);
 }
 
-// 縦画面で手札が1行に収まらない（横スクロールが必要になる）ときは、重ならない2段に分けて全部見えるようにする。
-// 2段でも収まらない枚数なら、各段を詰めた上で横スクロール。横向きスマホは高さが足りないので常に1行。
-const HAND_MULTI_ROW_MQ = window.matchMedia('(orientation: portrait)');
-const HAND_MAX_ROWS = 2;
+const CARD_ASPECT = 1.46; // カードの高さ÷幅（style.css の .card と同じ値）
+const HAND_ROW_GAP = 10; // 2段表示の段の間隔（style.css の .my-hand.multi-rows と同じ値）
+const LANDSCAPE_PHONE_MQ = window.matchMedia('(orientation: landscape) and (max-height: 500px)');
+const WIDE_SCREEN_MQ = window.matchMedia('(min-width: 700px) and (min-height: 560px)');
+
+// 画面の向き・大きさごとの、手札のカードの大きさの決め方
+function handSizingRules() {
+  const vh = window.innerHeight;
+  if (LANDSCAPE_PHONE_MQ.matches) {
+    // 横向きスマホ: 高さが貴重なので常に1行。カードの高さは画面の高さの約27%まで
+    return { maxRows: 1, maxW: 80, minW: 44, heightBudget: vh * 0.27 };
+  }
+  if (WIDE_SCREEN_MQ.matches) {
+    // タブレット・PC: 幅に余裕があるので1行で大きく
+    return { maxRows: 1, maxW: 104, minW: 56, heightBudget: vh * 0.3 };
+  }
+  // 縦向きスマホ: 1行で十分大きく（comfortableW以上）並べられなければ、重ならない2段にして大きく見せる。
+  // 手札エリアが画面の高さの約40%を超えない範囲で、できるだけ大きくする
+  return { maxRows: 2, maxW: 96, minW: 46, heightBudget: vh * 0.4, comfortableW: 68 };
+}
+
+// 手札の枚数とコンテナ幅から、段数とカード幅を決める（選択状態には依存しない）
+function chooseHandLayout(width, count) {
+  const rules = handSizingRules();
+  const fits = (w, rows) => {
+    const perRow = Math.ceil(count / rows);
+    const fitsWidth = perRow <= 1 || (width - w) / (perRow - 1) >= handMinSpacing(w);
+    const fitsHeight = rows * w * CARD_ASPECT + (rows - 1) * HAND_ROW_GAP <= rules.heightBudget;
+    return fitsWidth && fitsHeight;
+  };
+  const largest = (rows) => {
+    for (let w = rules.maxW; w >= rules.minW; w--) if (fits(w, rows)) return w;
+    return null;
+  };
+  const oneRow = largest(1);
+  if (rules.maxRows === 1 || (oneRow && oneRow >= (rules.comfortableW || 0))) {
+    return { rows: 1, cardWidth: oneRow || rules.minW };
+  }
+  const twoRows = largest(2);
+  if (twoRows && (!oneRow || twoRows > oneRow)) return { rows: 2, cardWidth: twoRows };
+  return { rows: 1, cardWidth: oneRow || rules.minW };
+}
 
 function layoutHand(wrap, cardEls) {
   const scrollLeft = wrap.scrollLeft;
   wrap.innerHTML = '';
   wrap.classList.remove('multi-rows');
   wrap.style.removeProperty('--overlap');
-  for (const c of cardEls) wrap.appendChild(c);
 
-  const m = handMetrics(wrap);
-  let rows = 1;
-  if (HAND_MULTI_ROW_MQ.matches && m.cardWidth) {
-    while (rows < HAND_MAX_ROWS && !handRowFits(m, Math.ceil(cardEls.length / rows))) rows++;
-  }
+  const cs = getComputedStyle(wrap);
+  const width = wrap.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+  const { rows, cardWidth } = chooseHandLayout(width, cardEls.length);
+  wrap.style.setProperty('--hand-card-w', `${cardWidth}px`);
+
   if (rows === 1) {
+    for (const c of cardEls) wrap.appendChild(c);
     updateHandOverlap(wrap);
   } else {
-    wrap.innerHTML = '';
     wrap.classList.add('multi-rows');
     const perRow = Math.ceil(cardEls.length / rows);
     for (let i = 0; i < cardEls.length; i += perRow) {

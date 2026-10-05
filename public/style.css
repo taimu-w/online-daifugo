@@ -682,10 +682,8 @@ button {
 /* --lift: 選択したカードを持ち上げる量。拡大や隣のカードのずらしはしないので、選択しても他のカードの位置は動かない */
 .my-hand { --overlap: -24px; --lift: -22px; }
 /* margin-left にはトランジションを付けない（手札は選択のたびに作り直すため、付けると全カードが毎回滑って見える） */
-.my-hand .card { width: 64px; height: 94px; margin-left: var(--overlap); transition: transform 0.22s cubic-bezier(.34,1.56,.64,1), box-shadow 0.2s ease, filter 0.15s ease; }
-.my-hand .card .card-center { font-size: 1.85rem; }
-.my-hand .card .card-corner { font-size: 0.74rem; }
-.my-hand .card .card-corner .corner-suit { font-size: 0.8rem; }
+/* 手札のカード幅は main.js#layoutHand が画面サイズと枚数から決めて --hand-card-w に入れる（未設定時は64px） */
+.my-hand .card { --cw: var(--hand-card-w, 64px); margin-left: var(--overlap); transition: transform 0.22s cubic-bezier(.34,1.56,.64,1), box-shadow 0.2s ease, filter 0.15s ease; }
 .my-hand .card:first-child { margin-left: 0; }
 /* 縦画面で1行に収まらないときの2段表示（main.js#layoutHand）。段どうしは重ねず、1段目のカード全体が見えてタップできるようにする */
 .my-hand.multi-rows { flex-direction: column; align-items: stretch; gap: 10px; }
@@ -715,11 +713,15 @@ button {
 .action-bar .btn { margin-top: 0; flex: none; width: auto; padding: 10px 16px; }
 
 /* ---------- カード ---------- */
+/* カードの大きさは --cw（幅）だけで決まる。高さは幅の1.46倍、数字・マークはカード自身を基準にした
+   コンテナ単位（cqw）で拡大縮小するので、場所ごとに文字サイズを個別指定しなくてよい */
 .card {
+  --cw: 52px;
+  container-type: inline-size;
   touch-action: manipulation;
   flex: 0 0 auto;
-  width: 52px;
-  height: 76px;
+  width: var(--cw);
+  height: calc(var(--cw) * 1.46);
   background: linear-gradient(160deg, #ffffff, var(--card-bg));
   border-radius: 8px;
   box-shadow: 0 2px 5px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(0,0,0,0.04);
@@ -737,17 +739,19 @@ button {
 .card-corner {
   position: absolute;
   top: 4px; left: 5px;
+  top: 7cqw; left: 9cqw;
   display: flex;
   flex-direction: column;
   align-items: center;
   line-height: 1;
   font-size: 0.62rem;
+  font-size: 20cqw;
   letter-spacing: -0.2px;
 }
-.card.joker .card-corner { font-size: 0.48rem; letter-spacing: 0; top: 5px; left: 4px; }
-.card-corner .corner-suit { font-size: 0.68rem; margin-top: 1px; }
-.card-center { font-size: 1.5rem; line-height: 1; }
-.card.joker .card-center { font-size: 1.3rem; }
+.card.joker .card-corner { font-size: 0.48rem; font-size: 14cqw; letter-spacing: 0; }
+.card-corner .corner-suit { font-size: 1.1em; margin-top: 1px; }
+.card-center { font-size: 1.5rem; font-size: 46cqw; line-height: 1; }
+.card.joker .card-center { font-size: 1.3rem; font-size: 40cqw; }
 .card.selected {
   transform: translateY(var(--lift, -22px));
   box-shadow: 0 0 0 3px var(--accent-strong), 0 0 0 6px rgba(242,196,100,0.22), 0 10px 18px rgba(0,0,0,0.45);
@@ -782,8 +786,7 @@ button {
 }
 .card:active:not(.selected) { transform: translateY(-10px); filter: brightness(1.06); }
 
-.card.field-card { width: 48px; height: 70px; margin: 0; animation: fieldCardIn 0.32s cubic-bezier(.2,.8,.2,1) backwards; }
-.card.field-card .card-center { font-size: 1.35rem; }
+.card.field-card { --cw: clamp(56px, 20vw, 88px); margin: 0; animation: fieldCardIn 0.32s cubic-bezier(.2,.8,.2,1) backwards; }
 .card.field-card:nth-child(1) { animation-delay: 0s; }
 .card.field-card:nth-child(2) { animation-delay: 0.03s; }
 .card.field-card:nth-child(3) { animation-delay: 0.06s; }
@@ -794,11 +797,8 @@ button {
   to { opacity: 1; transform: translateY(0) scale(1) rotate(0); }
 }
 
-.card.small { width: 38px; height: 55px; margin: 0; }
-.card.small .card-corner { font-size: 0.5rem; top: 3px; left: 3px; }
-.card.small .card-corner .corner-suit { font-size: 0.55rem; }
-.card.small .card-center { font-size: 1.05rem; }
-.card.small.joker .card-corner { font-size: 0.4rem; }
+.card.small { --cw: 42px; margin: 0; }
+.action-panel .card.small { --cw: 46px; }
 
 /* ---------- モーダル ---------- */
 .modal {
@@ -863,8 +863,8 @@ button {
 .action-panel .card.small { cursor: pointer; }
 .card-slot {
   flex: 0 0 auto;
-  width: 38px;
-  height: 55px;
+  width: 46px;
+  height: 67px;
   border-radius: 8px;
   border: 2px dashed rgba(242,196,100,0.45);
   color: rgba(242,196,100,0.6);
@@ -1026,16 +1026,12 @@ button {
 
 /* ---------- 小型スマホ対応 ---------- */
 @media (max-width: 360px) {
-  .card { width: 46px; height: 68px; }
-  .card-center { font-size: 1.3rem; }
   .player-chip { min-width: 54px; padding: 6px 6px 5px; }
   .player-chip .pname { max-width: 60px; }
 }
 
 @media (max-height: 600px) {
   .my-hand { min-height: 120px; padding-top: 30px; }
-  .card { height: 66px; }
-  .my-hand .card { width: 56px; height: 82px; }
   .table-felt { min-height: 70px; }
   .table-felt:has(.field-cards:empty) { min-height: 34px; }
 }
@@ -1100,8 +1096,7 @@ button {
   .table-felt { min-height: 48px; padding: 6px 10px; }
   .table-felt:has(.field-cards:empty) { min-height: 30px; }
   .field-cards { min-height: 44px; }
-  .card.field-card { width: 42px; height: 61px; }
-  .card.field-card .card-center { font-size: 1.15rem; }
+  .card.field-card { --cw: clamp(42px, 14vh, 60px); }
   .special-banner { padding: 5px 10px; font-size: 0.75rem; }
   .status-badges { gap: 4px; }
   .turn-indicator { font-size: 0.78rem; margin-bottom: 2px; }
@@ -1122,9 +1117,8 @@ button {
   .action-panel > .btn { grid-area: btn; margin: 6px 8px 0 0; padding: 8px 22px; align-self: start; }
   .seven-cards { gap: 5px; }
   .seven-card-row { padding: 3px 6px; gap: 8px; }
-  .action-panel .card.small, .card-slot { width: 30px; height: 44px; }
-  .action-panel .card.small .card-center { font-size: 0.85rem; }
-  .action-panel .card.small .card-corner { font-size: 0.42rem; top: 2px; left: 2px; }
+  .action-panel .card.small { --cw: 36px; }
+  .card-slot { width: 36px; height: 53px; }
   .target-chip { min-height: 34px; padding: 3px 10px 3px 3px; font-size: 0.8rem; }
   .target-chip .avatar { width: 24px; height: 24px; }
 
@@ -1142,8 +1136,6 @@ button {
   }
   .hand-info { grid-area: info; height: 18px; padding: 2px 4px 0; }
   .my-hand { grid-area: hand; min-height: 102px; padding: 24px 8px 6px; --lift: -16px; }
-  .my-hand .card { width: 50px; height: 72px; }
-  .my-hand .card .card-center { font-size: 1.35rem; }
   .action-bar {
     grid-area: actions;
     position: static;
@@ -1187,8 +1179,7 @@ button {
     min-height: 200px;
   }
   .table-felt:has(.field-cards:empty) { min-height: 90px; }
-  .card.field-card { width: 60px; height: 87px; }
-  .card.field-card .card-center { font-size: 1.65rem; }
+  .card.field-card { --cw: clamp(64px, 11vh, 96px); }
   .special-banner { font-size: 0.95rem; padding: 11px 18px; }
   .badge { font-size: 0.8rem; padding: 4px 12px; }
   .turn-indicator { font-size: 0.95rem; }
@@ -1201,10 +1192,6 @@ button {
     min-height: 157px;
     padding: 36px 16px 10px;
   }
-  .my-hand .card { width: 76px; height: 111px; }
-  .my-hand .card .card-center { font-size: 2.1rem; }
-  .my-hand .card .card-corner { font-size: 0.85rem; }
-  .my-hand .card .card-corner .corner-suit { font-size: 0.92rem; }
 
   .action-bar {
     right: max(10px, calc((100% - var(--hand-max-width)) / 2 + 10px));
@@ -1216,9 +1203,8 @@ button {
   .action-panel-head { padding: 14px 18px 6px; }
   .action-panel > .seven-cards, .action-panel > .picked-cards { padding: 8px 18px; }
   .action-panel > .btn { margin: 6px 18px 16px; }
-  .action-panel .card.small, .card-slot { width: 48px; height: 70px; }
-  .action-panel .card.small .card-center { font-size: 1.3rem; }
-  .action-panel .card.small .card-corner { font-size: 0.62rem; }
+  .action-panel .card.small { --cw: 56px; }
+  .card-slot { width: 56px; height: 82px; }
 }
 
 /* ロビー: 横長の画面では「参加者」と「設定・開始ボタン」を左右2列にする */

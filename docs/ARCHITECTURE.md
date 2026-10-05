@@ -58,7 +58,7 @@ server/game/Game.js    … 1ゲームの状態機械（手札・場・革命・�
 - サーバーから届く `room:state` / `game:state` をそのまま描画するだけの薄いビュー層。ローカルに持つ状態は「選択中のカードID」「モーダルの入力途中の値」など、UI操作の一時状態のみ。
 - `localStorage` にセッション（`playerId` / `roomCode`）を保存し、リロードや再接続時に `room:rejoin` で復帰する。
 - 7わたし・10捨て・カード交換の選択UIは、手札エリアに重ならないよう `#game-center` 内のパネル（`#panel-seven` 等）として描画する（スマホ横向きでもカードを選び直せるようにするため）。Qボンバー・結果画面などはモーダル。
-- 手札は縦画面で1行に収まらない場合、`layoutHand` が重ならない2段の `.hand-row` に分割する。重なり幅（`--overlap`）は `updateHandOverlap` が枚数とコンテナ幅だけから計算し、選択状態には依存させない（選択は `--lift` で持ち上げるだけなので、カードを選んでも他のカードの位置は動かない）。
+- 手札は縦画面で1行に収まらない場合、`layoutHand` が重ならない2段の `.hand-row` に分割する。重なり幅（`--overlap`）は `updateHandOverlap` が枚数とコンテナ幅だけから計算し、選択状態には依存させない（選択は `--lift` で持ち上げるだけなので、カードを選んでも他のカードの位置は動かない）。カード幅は `chooseHandLayout` が画面の向き・大きさ・枚数から決めて `--hand-card-w` に設定し、カードの高さと数字・マークの大きさは CSS 側で幅に比例させている（`.card` の `--cw` と `cqw` 単位）。
 - PWA: `public/manifest.webmanifest` と `public/sw.js`（ネットワーク優先のシェルキャッシュ、`/socket.io/` と他オリジンには介入しない）。登録とインストール導線（Androidの `beforeinstallprompt`、iOSの案内表示）は `main.js` 末尾。
 
 ### ログの公開範囲

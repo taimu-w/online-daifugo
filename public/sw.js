@@ -5,7 +5,7 @@
 // 目的は「ホーム画面から起動したときにアプリの外枠（HTML/CSS/JS/アイコン）を素早く出すこと」と
 // 「インストール要件を満たすこと」。常にネットワーク優先で、更新がすぐ反映されるようにする。
 // 静的ファイルを変更したら CACHE_NAME のバージョンを上げると、古いキャッシュが確実に破棄される。
-const CACHE_NAME = 'daifugo-shell-v3';
+const CACHE_NAME = 'daifugo-shell-v4';
 const SHELL_FILES = [
   '/',
   '/index.html',
