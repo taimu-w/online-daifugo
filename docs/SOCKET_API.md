@@ -97,7 +97,7 @@
   turnDeadline: number | null,    // Date.now() 基準のUnixミリ秒
   pendingAction: PendingAction | null,
   myHand: Card[],                 // 自分の手札のみ。他人の手札は handCount しか見えない
-  log: { message: string, at: number }[],  // 直近30件
+  log: { message: string, at: number }[],  // 直近30件。7わたし・カード交換のログは当事者以外には「◯枚」表記に差し替えられる（件数は全員同じ）
   ended: boolean,
   finalRanking: { id, name, rank, status }[] | null,  // ended時のみ
   loserReveal: { playerId, name, cards: Card[] } | null,  // ended時、最下位が残していた手札（全員に公開）。手札0枚で終局した場合はnull

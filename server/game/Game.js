@@ -115,9 +115,16 @@ class Game extends EventEmitter {
     return this.revolution !== this.jbackActive; // XOR
   }
 
-  _pushLog(message) {
-    this.log.push({ message, at: Date.now() });
+  // visibleTo を指定したログは、そのプレイヤーにだけ message を見せ、それ以外には publicMessage を見せる
+  // （7わたし・カード交換で「何のカードが渡ったか」を当事者以外に伏せるため）
+  _pushLog(message, { visibleTo = null, publicMessage = null } = {}) {
+    this.log.push({ message, at: Date.now(), visibleTo, publicMessage });
     if (this.log.length > 200) this.log.shift();
+  }
+
+  _logForViewer(entry, viewerId) {
+    const hidden = entry.visibleTo && !entry.visibleTo.includes(viewerId);
+    return { message: hidden ? entry.publicMessage : entry.message, at: entry.at };
   }
 
   _deal() {
@@ -193,7 +200,7 @@ class Game extends EventEmitter {
       turnDeadline: this.turnDeadline || null,
       pendingAction: this.pendingAction,
       myHand: viewerId ? sortHand(this.getPlayer(viewerId)?.hand || []) : [],
-      log: this.log.slice(-30),
+      log: this.log.slice(-30).map((e) => this._logForViewer(e, viewerId)),
       ended: this.ended,
       finalRanking: this.ended ? this._rankingSummary() : null,
       loserReveal: this.ended ? this.loserReveal : null,
@@ -271,7 +278,7 @@ class Game extends EventEmitter {
       this._pushLog(`${player.name} が ♠3返し！ 場を流します。`);
       this._flowField();
       this.currentPlayerId = playerId;
-      this.finalContext = { playerId, playedCards: cards, nextTurnId: playerId, fieldFlowedByEight: true };
+      this.finalContext = { playerId, playedCards: cards, nextTurnId: playerId, fieldFlowedByEight: true, spade3Return: true };
       return this._finalizePlay(player, cards, { skipRevolutionEtc: true });
     }
 
@@ -388,7 +395,10 @@ class Game extends EventEmitter {
       const takenIds = new Set(taken.map((c) => c.id));
       giver.hand = giver.hand.filter((c) => !takenIds.has(c.id));
       receiver.hand = sortHand(receiver.hand.concat(taken));
-      this._pushLog(`【カード交換】${giver.name} → ${receiver.name} へ ${taken.map((c) => cardLabel(c)).join('、')} を献上`);
+      this._pushLog(`【カード交換】${giver.name} → ${receiver.name} へ ${taken.map((c) => cardLabel(c)).join('、')} を献上`, {
+        visibleTo: [giver.id, receiver.id],
+        publicMessage: `【カード交換】${giver.name} → ${receiver.name} へ ${taken.length}枚を献上`,
+      });
     }
   }
 
@@ -443,7 +453,10 @@ class Game extends EventEmitter {
     const moved = chooser.hand.filter((c) => idSet.has(c.id));
     chooser.hand = chooser.hand.filter((c) => !idSet.has(c.id));
     target.hand = sortHand(target.hand.concat(moved));
-    this._pushLog(`【カード交換】${chooser.name} → ${target.name} へ ${moved.map((c) => cardLabel(c)).join('、')} を返却`);
+    this._pushLog(`【カード交換】${chooser.name} → ${target.name} へ ${moved.map((c) => cardLabel(c)).join('、')} を返却`, {
+      visibleTo: [chooser.id, target.id],
+      publicMessage: `【カード交換】${chooser.name} → ${target.name} へ ${moved.length}枚を返却`,
+    });
   }
 
   // ---------- Qボンバー ----------
@@ -562,6 +575,8 @@ class Game extends EventEmitter {
   }
 
   _applySevenGive(giver, allocation) {
+    // 渡し先ごとにまとめてログを出す。カードの中身は渡した本人と受け取った本人にだけ見せる
+    const givenByTarget = new Map();
     for (const a of allocation) {
       const idx = giver.hand.findIndex((c) => c.id === a.cardId);
       if (idx === -1) continue;
@@ -569,7 +584,15 @@ class Game extends EventEmitter {
       const target = this.getPlayer(a.toPlayerId);
       target.hand.push(card);
       target.hand = sortHand(target.hand);
-      this._pushLog(`${giver.name} → ${target.name} へ ${cardLabel(card)} を渡しました`);
+      if (!givenByTarget.has(target.id)) givenByTarget.set(target.id, []);
+      givenByTarget.get(target.id).push(card);
+    }
+    for (const [targetId, cards] of givenByTarget) {
+      const target = this.getPlayer(targetId);
+      this._pushLog(`${giver.name} → ${target.name} へ ${cards.map((c) => cardLabel(c)).join('、')} を渡しました`, {
+        visibleTo: [giver.id, target.id],
+        publicMessage: `${giver.name} → ${target.name} へ ${cards.length}枚 渡しました`,
+      });
     }
     if (giver.hand.length === 0) {
       this._finishPlayer(giver.id, { legit: true });
@@ -728,17 +751,19 @@ class Game extends EventEmitter {
     const ctx = this.finalContext || { playerId: player.id, playedCards, nextTurnId: this._nextActivePlayerId(player.id), fieldFlowedByEight: false };
 
     // 上がり判定（直接プレイによるもの）
+    // ♠3は常に禁止ではなく、ジョーカー単体へのスペ3返しで上がった場合のみ反則とする
     if (player.hand.length === 0 && player.status === 'active') {
-      const isForbidden = playedCards.some((c) => {
+      const isForbidden = !!ctx.spade3Return || playedCards.some((c) => {
         if (c.joker) return true;
         if (c.rank === 8) return true;
         if (c.rank === 11) return true;
-        if (c.suit === 'S' && c.rank === 3) return true;
         if (isStrongestNormalRank(c.rank, this.revolution)) return true;
         return false;
       });
       if (isForbidden) {
-        this._pushLog(`${player.name} は禁止カードで上がったため反則負けです。`);
+        this._pushLog(ctx.spade3Return
+          ? `${player.name} はスペ3返しで上がったため反則負けです。`
+          : `${player.name} は禁止カードで上がったため反則負けです。`);
         this._faultFinish(player.id, 'foul');
         this.finalContext = null;
         this.emit('update');

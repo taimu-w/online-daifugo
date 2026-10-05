@@ -57,6 +57,13 @@ server/game/Game.js    … 1ゲームの状態機械（手札・場・革命・�
 ### `public/main.js`
 - サーバーから届く `room:state` / `game:state` をそのまま描画するだけの薄いビュー層。ローカルに持つ状態は「選択中のカードID」「モーダルの入力途中の値」など、UI操作の一時状態のみ。
 - `localStorage` にセッション（`playerId` / `roomCode`）を保存し、リロードや再接続時に `room:rejoin` で復帰する。
+- 7わたし・10捨て・カード交換の選択UIは、手札エリアに重ならないよう `#game-center` 内のパネル（`#panel-seven` 等）として描画する（スマホ横向きでもカードを選び直せるようにするため）。Qボンバー・結果画面などはモーダル。
+- 手札は縦画面で1行に収まらない場合、`layoutHand` が重ならない2段の `.hand-row` に分割する。重なり幅（`--overlap`）は `updateHandOverlap` が枚数とコンテナ幅だけから計算し、選択状態には依存させない（選択は `--lift` で持ち上げるだけなので、カードを選んでも他のカードの位置は動かない）。
+- PWA: `public/manifest.webmanifest` と `public/sw.js`（ネットワーク優先のシェルキャッシュ、`/socket.io/` と他オリジンには介入しない）。登録とインストール導線（Androidの `beforeinstallprompt`、iOSの案内表示）は `main.js` 末尾。
+
+### ログの公開範囲
+- `Game#_pushLog(message, { visibleTo, publicMessage })` で、ログごとに「誰に中身を見せるか」を指定できる。`visibleTo` に含まれないプレイヤーには `getPublicState` で `publicMessage` に差し替えて返す（ログの件数は全員同じなので、クライアント側の差分表示は崩れない）。
+- 7わたし（`_applySevenGive`）と階級制の献上・下賜（`_applyForcedTributes` / `_applyClassExchangeReturn`）は、カードの中身を当事者2人にだけ見せ、それ以外には枚数のみを見せる。
 
 ## ゲーム状態機械
 
@@ -111,7 +118,7 @@ server/game/Game.js    … 1ゲームの状態機械（手札・場・革命・�
 
 ### 上がり・反則・離脱・ゲーム終了
 
-- **禁止カードでの上がり**（8・J・ジョーカー・♠3・その時点の最強札）は `_finalizePlay` 内で判定し、該当すれば `_faultFinish(id, 'foul')` を呼ぶ。手札はすべて破棄、`nextBottomRank` から順位を割り当て、以後そのプレイヤーはターンに参加しない。
+- **禁止カードでの上がり**（8・J・ジョーカー・その時点の最強札）と**スペ3返しでの上がり**は `_finalizePlay` 内で判定し、該当すれば `_faultFinish(id, 'foul')` を呼ぶ。♠3そのものは禁止カードではなく、スペ3返しのときだけ `finalContext.spade3Return` が立ち、それで手札0枚になった場合のみ反則になる（通常の♠3単体出しや、♠3を含むペア等での上がりは正当）。手札はすべて破棄、`nextBottomRank` から順位を割り当て、以後そのプレイヤーはターンに参加しない。
 - **Qボンバー／10捨て／7わたしで手札が0枚になった場合は反則判定の対象外**（仕様どおり）。それぞれ `_checkZeroHandAgariForAll` / `_finishPlayer` で直接「上がり」処理をする。
 - **途中離脱**（`voluntaryLeave`）と**反則負け**は同じ `_faultFinish` を通る（`reason` が `'left'` か `'foul'` かの違いのみ）。
 - 場の所有者が離脱・反則負けした場合、場は自動的に流れる。

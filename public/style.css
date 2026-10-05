@@ -14,6 +14,8 @@
   --radius: 12px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-top: env(safe-area-inset-top, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -25,6 +27,8 @@ html, body {
   color: var(--text);
   font-family: "Hiragino Sans", "Yu Gothic", "Segoe UI", system-ui, sans-serif;
   -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   overscroll-behavior: none;
 }
 
@@ -53,6 +57,8 @@ button {
   padding: 24px;
   padding-top: calc(24px + var(--safe-top));
   padding-bottom: calc(24px + var(--safe-bottom));
+  padding-left: calc(24px + var(--safe-left));
+  padding-right: calc(24px + var(--safe-right));
   background:
     radial-gradient(circle at 20% 15%, rgba(224,166,62,0.10), transparent 55%),
     radial-gradient(circle at 85% 85%, rgba(224,166,62,0.08), transparent 50%),
@@ -108,6 +114,19 @@ button {
   font-size: 1rem;
 }
 .field input:focus { outline: 2px solid var(--accent); }
+
+/* PWAインストール案内 */
+.install-btn { margin-top: 18px; }
+.install-hint {
+  margin: 18px 0 0;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: rgba(0,0,0,0.18);
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  text-align: center;
+}
 
 /* ---------- アイコン（アバター）共通 ---------- */
 .avatar {
@@ -203,8 +222,12 @@ button {
   padding: 20px;
   padding-top: calc(20px + var(--safe-top));
   padding-bottom: calc(20px + var(--safe-bottom));
+  padding-left: calc(20px + var(--safe-left));
+  padding-right: calc(20px + var(--safe-right));
   overflow-y: auto;
 }
+.lobby-body { flex: 1; display: flex; flex-direction: column; }
+.lobby-side { flex: 1; display: flex; flex-direction: column; }
 .lobby-header h2 { margin: 4px 0 12px; font-size: 1.2rem; color: var(--accent-strong); }
 .room-code-box {
   display: flex;
@@ -282,12 +305,17 @@ button {
 #screen-game {
   height: 100vh;
   height: 100dvh;
+  max-width: none;
   display: grid;
   grid-template-rows: auto 1fr auto;
   grid-template-columns: minmax(0, 1fr);
   padding-top: var(--safe-top);
-  padding-bottom: var(--safe-bottom);
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
   overflow: hidden;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
   background:
     radial-gradient(ellipse at 50% 40%, rgba(255,255,255,0.04), transparent 60%),
     var(--bg);
@@ -298,7 +326,8 @@ button {
   gap: 6px;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 8px 8px;
+  padding: 10px 8px 8px;
+  scrollbar-width: none;
   background: var(--bg-deep);
   border-bottom: 1px solid #113a2c;
   flex-shrink: 0;
@@ -319,6 +348,8 @@ button {
   position: relative;
   border: 1px solid transparent;
 }
+.game-top > .player-chip:first-child { margin-left: auto; }
+.game-top > .player-chip:last-child { margin-right: auto; }
 .player-chip.me-tappable { cursor: pointer; }
 .player-chip.me-tappable:active { transform: scale(0.96); }
 .player-chip.turn {
@@ -606,6 +637,9 @@ button {
   background: var(--bg-deep);
   border-top: 1px solid #113a2c;
   padding: 4px 10px calc(8px + var(--safe-bottom));
+  margin: 0 calc(-1 * var(--safe-right)) 0 calc(-1 * var(--safe-left));
+  padding-left: calc(10px + var(--safe-left));
+  padding-right: calc(10px + var(--safe-right));
   flex-shrink: 0;
   min-width: 0;
   position: relative;
@@ -622,7 +656,7 @@ button {
   font-size: 0.72rem;
   color: var(--text-dim);
   padding: 4px 4px 0;
-  min-height: 16px;
+  height: 22px;
 }
 .hand-info .sel-count { color: var(--accent-strong); font-weight: 700; }
 .hand-info .btn-clear-sel {
@@ -631,28 +665,31 @@ button {
   font-size: 0.72rem;
   text-decoration: underline;
   padding: 2px 4px;
+  line-height: 1.2;
 }
 .my-hand {
   display: flex;
   align-items: flex-end;
   overflow-x: auto;
   overflow-y: visible;
-  padding: 46px 10px 8px;
-  min-height: 154px;
+  padding: 32px 14px 8px;
+  min-height: 134px;
   min-width: 0;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
 .my-hand::-webkit-scrollbar { display: none; }
-.my-hand { --overlap: -24px; }
-.my-hand .card { width: 64px; height: 94px; margin-left: var(--overlap); transition: transform 0.22s cubic-bezier(.34,1.56,.64,1), box-shadow 0.2s ease, margin-left 0.2s cubic-bezier(.34,1.56,.64,1), filter 0.15s ease; }
+/* --lift: 選択したカードを持ち上げる量。拡大や隣のカードのずらしはしないので、選択しても他のカードの位置は動かない */
+.my-hand { --overlap: -24px; --lift: -22px; }
+/* margin-left にはトランジションを付けない（手札は選択のたびに作り直すため、付けると全カードが毎回滑って見える） */
+.my-hand .card { width: 64px; height: 94px; margin-left: var(--overlap); transition: transform 0.22s cubic-bezier(.34,1.56,.64,1), box-shadow 0.2s ease, filter 0.15s ease; }
 .my-hand .card .card-center { font-size: 1.85rem; }
 .my-hand .card .card-corner { font-size: 0.74rem; }
 .my-hand .card .card-corner .corner-suit { font-size: 0.8rem; }
 .my-hand .card:first-child { margin-left: 0; }
-.my-hand .card.selected { z-index: 40; }
-.my-hand .card.selected:not(:first-child) { margin-left: calc(var(--overlap) + 40px); }
-.my-hand .card.selected + .card { margin-left: calc(var(--overlap) + 40px); }
+/* 縦画面で1行に収まらないときの2段表示（main.js#layoutHand）。段どうしは重ねず、1段目のカード全体が見えてタップできるようにする */
+.my-hand.multi-rows { flex-direction: column; align-items: stretch; gap: 10px; }
+.hand-row { display: flex; align-items: flex-end; min-width: 0; }
 @media (hover: hover) and (pointer: fine) {
   .my-hand .card:not(.selected):hover { transform: translateY(-10px); box-shadow: 0 6px 16px rgba(0,0,0,0.4); filter: brightness(1.04); }
 }
@@ -679,6 +716,7 @@ button {
 
 /* ---------- カード ---------- */
 .card {
+  touch-action: manipulation;
   flex: 0 0 auto;
   width: 52px;
   height: 76px;
@@ -711,14 +749,16 @@ button {
 .card-center { font-size: 1.5rem; line-height: 1; }
 .card.joker .card-center { font-size: 1.3rem; }
 .card.selected {
-  transform: translateY(-19px) scale(1.28);
-  box-shadow: 0 0 0 3px var(--accent-strong), 0 0 0 6px rgba(242,196,100,0.22), 0 14px 22px rgba(0,0,0,0.5);
-  animation: cardSelectPop 0.24s cubic-bezier(.34,1.56,.64,1);
+  transform: translateY(var(--lift, -22px));
+  box-shadow: 0 0 0 3px var(--accent-strong), 0 0 0 6px rgba(242,196,100,0.22), 0 10px 18px rgba(0,0,0,0.45);
 }
+/* 持ち上げのアニメーションは、いまタップしたカードにだけ付ける（main.js#renderHand の .pop）。
+   他の選択済みカードまで毎回跳ねると、手札全体が動いて見えるため */
+.card.selected.pop { animation: cardSelectPop 0.2s cubic-bezier(.34,1.56,.64,1); }
 @keyframes cardSelectPop {
-  0% { transform: translateY(-14px) scale(1.1); }
-  55% { transform: translateY(-23px) scale(1.34); }
-  100% { transform: translateY(-19px) scale(1.28); }
+  0% { transform: translateY(0); }
+  60% { transform: translateY(calc(var(--lift, -22px) - 4px)); }
+  100% { transform: translateY(var(--lift, -22px)); }
 }
 .card.selected::after {
   content: '✓';
@@ -780,17 +820,59 @@ button {
 .modal-box h3 { margin: 0 0 8px; color: var(--accent-strong); }
 .modal-box p { color: var(--text-dim); font-size: 0.85rem; }
 
-/* 10捨て・7わたし・カード交換は下の手札から選ぶため、モーダル自体はカードへのクリックを妨げない */
-#modal-ten,
-#modal-seven,
-#modal-exchange {
-  align-items: flex-start;
-  background: transparent;
-  pointer-events: none;
+.modal-box .btn + .btn { margin-top: 8px; }
+
+/* ---------- 中央パネル（7わたし・10捨て・カード交換） ----------
+   手札から選ぶ操作なので、モーダルではなく中央エリアの中に表示し、手札エリアには絶対に重ならないようにする。
+   パネル表示中は場のカードを隠し、残り時間バーはそのまま見えるようにする。 */
+.game-center.has-panel { justify-content: flex-start; }
+.game-center.has-panel .table-felt { display: none; }
+.action-panel {
+  width: 100%;
+  max-width: 560px;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid rgba(242,196,100,0.45);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.35);
+  overflow: hidden;
+  animation: panelIn 0.22s ease-out;
 }
-#modal-ten .modal-box,
-#modal-seven .modal-box,
-#modal-exchange .modal-box { pointer-events: auto; }
+@keyframes panelIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.action-panel-head { padding: 10px 14px 4px; flex-shrink: 0; }
+.action-panel-head h3 { margin: 0; color: var(--accent-strong); font-size: 1.05rem; }
+.action-panel-head p { margin: 3px 0 0; color: var(--text-dim); font-size: 0.8rem; line-height: 1.4; }
+.action-panel > .seven-cards,
+.action-panel > .picked-cards {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 6px 14px;
+  margin: 0;
+}
+.action-panel > .btn { flex-shrink: 0; width: auto; margin: 4px 14px 12px; padding: 12px; }
+
+.picked-cards { display: flex; flex-wrap: wrap; gap: 8px; align-content: flex-start; }
+.action-panel .card.small { cursor: pointer; }
+.card-slot {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 55px;
+  border-radius: 8px;
+  border: 2px dashed rgba(242,196,100,0.45);
+  color: rgba(242,196,100,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
 
 .chip-grid { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
 .chip {
@@ -803,17 +885,29 @@ button {
 }
 .chip.picked { background: var(--accent); color: #241a04; }
 
-.seven-cards { display: flex; flex-direction: column; gap: 10px; margin: 12px 0; }
-.seven-card-row { display: flex; align-items: center; gap: 10px; background: var(--bg-deep); padding: 8px; border-radius: 8px; }
-.seven-card-row select {
-  flex: 1;
-  padding: 9px;
-  border-radius: 6px;
-  background: #0d3327;
+.seven-cards { display: flex; flex-direction: column; gap: 8px; }
+.seven-card-row { display: flex; align-items: center; gap: 10px; background: var(--bg-deep); padding: 7px 8px; border-radius: 9px; }
+.seven-card-row.empty { opacity: 0.75; }
+.seven-empty-text { color: var(--text-dim); font-size: 0.8rem; }
+.seven-targets { flex: 1; display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.target-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 5px 12px 5px 5px;
+  border-radius: 20px;
+  background: var(--panel-light);
   color: var(--text);
-  border: 1px solid #2c6b52;
-  font-size: 0.95rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border: 2px solid transparent;
+  min-height: 40px;
 }
+.target-chip .avatar { width: 26px; height: 26px; font-size: 0.7rem; }
+.target-chip .target-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.target-chip.picked { background: var(--accent); color: #241a04; border-color: var(--accent-strong); }
+.target-chip:active { transform: scale(0.96); }
 
 /* ---------- アイコン設定モーダル ---------- */
 .avatar-modal-box { text-align: center; }
@@ -934,13 +1028,12 @@ button {
 @media (max-width: 360px) {
   .card { width: 46px; height: 68px; }
   .card-center { font-size: 1.3rem; }
-  .my-hand .card { margin-left: -20px; }
   .player-chip { min-width: 54px; padding: 6px 6px 5px; }
   .player-chip .pname { max-width: 60px; }
 }
 
 @media (max-height: 600px) {
-  .my-hand { min-height: 134px; padding-top: 42px; }
+  .my-hand { min-height: 120px; padding-top: 30px; }
   .card { height: 66px; }
   .my-hand .card { width: 56px; height: 82px; }
   .table-felt { min-height: 70px; }
@@ -951,19 +1044,25 @@ button {
 @media (orientation: landscape) and (max-height: 500px) {
   .screen { max-width: none; }
 
-  #screen-home { padding: 12px; }
-  .home-card { padding: 16px 20px; max-width: 380px; margin: 0 auto; }
+  #screen-home { padding-top: calc(12px + var(--safe-top)); padding-bottom: calc(12px + var(--safe-bottom)); }
+  .home-card { padding: 16px 20px; width: 100%; max-width: 420px; margin: 0 auto; }
   .home-card h1 { font-size: 1.3rem; }
   .home-card .sub { margin-bottom: 12px; }
+  .avatar-xl { width: 60px; height: 60px; font-size: 1.3rem; }
+  .avatar-picker-btn { margin-bottom: 10px; }
   .field { margin-bottom: 8px; }
+  .field input { padding: 10px 12px; }
+  .btn { padding: 11px; }
   .divider { margin: 10px 0 8px; }
 
-  #screen-lobby { max-width: 480px; margin: 0 auto; }
+  #screen-lobby { padding-top: calc(12px + var(--safe-top)); padding-bottom: calc(12px + var(--safe-bottom)); }
+  .lobby-header h2 { margin: 0 0 8px; font-size: 1.05rem; }
+  .room-code-box { padding: 8px 12px; margin-bottom: 10px; }
 
-  /* ゲーム画面: 左にプレイヤー一覧、右に場、下に手札 */
+  /* ゲーム画面: 左にプレイヤー一覧（コンパクトな横長チップ）、右に場、下に手札＋操作ボタン */
   #screen-game {
-    grid-template-columns: 84px 1fr;
-    grid-template-rows: 1fr auto;
+    grid-template-columns: 150px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
     grid-template-areas:
       "top center"
       "bottom bottom";
@@ -975,42 +1074,99 @@ button {
     overflow-y: auto;
     border-bottom: none;
     border-right: 1px solid #113a2c;
-    padding: 6px 4px;
-    gap: 4px;
+    padding: 8px 6px;
+    gap: 5px;
   }
-  .player-chip { min-width: 0; width: 100%; padding: 5px 4px 4px; }
-  .player-chip .pname { max-width: 100%; }
+  .game-top > .player-chip:first-child { margin-left: 0; margin-top: auto; }
+  .game-top > .player-chip:last-child { margin-right: 0; margin-bottom: auto; }
+  .player-chip {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    column-gap: 7px;
+    row-gap: 0;
+    align-items: center;
+    text-align: left;
+    min-width: 0;
+    width: 100%;
+    padding: 5px 7px;
+  }
+  .player-chip .avatar-wrap { grid-row: 1 / span 2; }
+  .player-chip .pname { max-width: 100%; font-size: 0.7rem; }
+  .player-chip .pcount { font-size: 0.78rem; line-height: 1.15; }
+  .player-chip .class-badge { top: -6px; left: auto; right: 22px; }
 
   .game-center { grid-area: center; padding: 6px 10px; gap: 5px; }
   .table-felt { min-height: 48px; padding: 6px 10px; }
   .table-felt:has(.field-cards:empty) { min-height: 30px; }
   .field-cards { min-height: 44px; }
-  .card.field-card { width: 38px; height: 55px; }
-  .card.field-card .card-center { font-size: 1.05rem; }
+  .card.field-card { width: 42px; height: 61px; }
+  .card.field-card .card-center { font-size: 1.15rem; }
   .special-banner { padding: 5px 10px; font-size: 0.75rem; }
   .status-badges { gap: 4px; }
+  .turn-indicator { font-size: 0.78rem; margin-bottom: 2px; }
+  .log-popup-item { font-size: 0.85rem; padding: 7px 16px 7px 12px; }
 
+  /* 高さが足りないので、決定ボタンは見出しの右に置き、選んだカードの一覧に高さを回す */
+  .action-panel {
+    max-width: none;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas: "head btn" "list list";
+  }
+  .action-panel-head { grid-area: head; padding: 6px 12px 2px; align-self: center; }
+  .action-panel-head h3 { font-size: 0.95rem; display: inline; margin-right: 8px; }
+  .action-panel-head p { display: inline; font-size: 0.74rem; }
+  .action-panel > .seven-cards, .action-panel > .picked-cards { grid-area: list; padding: 2px 12px 8px; }
+  .action-panel > .btn { grid-area: btn; margin: 6px 8px 0 0; padding: 8px 22px; align-self: start; }
+  .seven-cards { gap: 5px; }
+  .seven-card-row { padding: 3px 6px; gap: 8px; }
+  .action-panel .card.small, .card-slot { width: 30px; height: 44px; }
+  .action-panel .card.small .card-center { font-size: 0.85rem; }
+  .action-panel .card.small .card-corner { font-size: 0.42rem; top: 2px; left: 2px; }
+  .target-chip { min-height: 34px; padding: 3px 10px 3px 3px; font-size: 0.8rem; }
+  .target-chip .avatar { width: 24px; height: 24px; }
+
+  /* 手札の右側に「出す」「パス」を縦に並べ、場のエリアに被らないようにする */
   .game-bottom {
     grid-area: bottom;
-    padding: 2px 8px calc(4px + var(--safe-bottom));
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "info info"
+      "hand actions";
+    padding-top: 2px;
+    padding-bottom: calc(4px + var(--safe-bottom));
     border-top: 1px solid #113a2c;
   }
-  .hand-info { min-height: 12px; padding: 2px 4px 0; }
-  .my-hand { min-height: 112px; padding: 32px 8px 6px; }
-  .my-hand .card { width: 50px; height: 72px; margin-left: -18px; }
+  .hand-info { grid-area: info; height: 18px; padding: 2px 4px 0; }
+  .my-hand { grid-area: hand; min-height: 102px; padding: 24px 8px 6px; --lift: -16px; }
+  .my-hand .card { width: 50px; height: 72px; }
   .my-hand .card .card-center { font-size: 1.35rem; }
-  .card.selected { transform: translateY(-12px) scale(1.25); }
-  .my-hand .card.selected:not(:first-child) { margin-left: 14px; }
-  .my-hand .card.selected + .card { margin-left: 14px; }
-  .action-bar .btn { padding: 8px 12px; font-size: 0.85rem; }
+  .action-bar {
+    grid-area: actions;
+    position: static;
+    align-self: end;
+    flex-direction: column-reverse;
+    width: 92px;
+    margin: 0 0 6px 6px;
+    padding: 0;
+    background: none;
+    box-shadow: none;
+    transform: none;
+  }
+  .action-bar.visible { transform: none; }
+  .action-bar .btn { width: 100%; padding: 12px 8px; font-size: 0.9rem; }
+  .action-bar #btn-play { padding: 16px 8px; }
+  .action-bar #btn-play.hidden { display: block !important; visibility: hidden; }
 }
 
-/* ---------- PC / 広い画面対応 ---------- */
+/* ---------- タブレット・PC / 広い画面対応 ---------- */
 /* min-height条件により、スマホ横向き（max-height:500px）の対象とは重ならない */
-@media (min-width: 860px) and (min-height: 560px) {
+@media (min-width: 700px) and (min-height: 560px) {
   #screen-game {
-    max-width: none;
-    --hand-max-width: 900px;
+    --hand-max-width: 960px;
   }
 
   .game-top {
@@ -1042,8 +1198,8 @@ button {
   .my-hand {
     max-width: var(--hand-max-width);
     margin: 0 auto;
-    min-height: 176px;
-    padding: 50px 10px 10px;
+    min-height: 157px;
+    padding: 36px 16px 10px;
   }
   .my-hand .card { width: 76px; height: 111px; }
   .my-hand .card .card-center { font-size: 2.1rem; }
@@ -1055,4 +1211,33 @@ button {
     padding: 10px 12px;
   }
   .action-bar .btn { padding: 12px 20px; font-size: 1rem; }
+
+  .action-panel { max-width: 640px; }
+  .action-panel-head { padding: 14px 18px 6px; }
+  .action-panel > .seven-cards, .action-panel > .picked-cards { padding: 8px 18px; }
+  .action-panel > .btn { margin: 6px 18px 16px; }
+  .action-panel .card.small, .card-slot { width: 48px; height: 70px; }
+  .action-panel .card.small .card-center { font-size: 1.3rem; }
+  .action-panel .card.small .card-corner { font-size: 0.62rem; }
+}
+
+/* ロビー: 横長の画面では「参加者」と「設定・開始ボタン」を左右2列にする */
+@media (orientation: landscape) and (min-width: 640px) {
+  #screen-lobby { max-width: 900px; }
+  .lobby-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 18px;
+    align-items: start;
+  }
+  .lobby-side { margin-top: 0; }
+  .lobby-actions { padding-top: 10px; }
+}
+
+/* マウス操作の環境では、ボタンやカードにホバーのフィードバックを付ける */
+@media (hover: hover) and (pointer: fine) {
+  .btn:not(:disabled):hover { filter: brightness(1.08); }
+  .target-chip:hover, .chip:hover { filter: brightness(1.12); }
+  .player-chip.me-tappable:hover { border-color: rgba(242,196,100,0.4); }
+  .chip, .target-chip { cursor: pointer; }
 }

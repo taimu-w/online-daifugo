@@ -584,9 +584,18 @@ function renderBadges(state) {
   }
 }
 
+// 手札から選ぶ特殊操作（中央エリアのパネルで操作するもの）
+const PANEL_ACTION_TYPES = ['sevenGive', 'tenDiscard', 'classExchange'];
+
+function isMyPanelAction(state) {
+  const pending = state.pendingAction;
+  return !!(pending && pending.by === myPlayerId && PANEL_ACTION_TYPES.includes(pending.type));
+}
+
 function renderSpecialBanner(state) {
   const banner = $('#special-banner');
-  if (!state.pendingAction) {
+  // 自分が操作する側のときは、中央のパネル自体に説明が出るのでバナーは出さない
+  if (!state.pendingAction || isMyPanelAction(state)) {
     banner.classList.add('hidden');
     return;
   }
@@ -700,73 +709,128 @@ function showLogPopup(message) {
   setTimeout(() => item.remove(), LOG_POPUP_LIFETIME_MS);
 }
 
-function updateHandOverlap(wrap, cardCount) {
-  if (cardCount <= 1) { wrap.style.removeProperty('--overlap'); return; }
-  const firstCard = wrap.querySelector('.card');
-  if (!firstCard) return;
-  const cardWidth = firstCard.getBoundingClientRect().width;
-  if (!cardWidth) return;
-  const cs = getComputedStyle(wrap);
-  const padLeft = parseFloat(cs.paddingLeft) || 0;
-  const padRight = parseFloat(cs.paddingRight) || 0;
-  const containerWidth = wrap.clientWidth - padLeft - padRight;
-  const rawSpacing = (containerWidth - cardWidth) / (cardCount - 1);
-  const minSpacing = Math.max(cardWidth * 0.4, 26);
-  const maxSpacing = cardWidth + 6;
-  const spacing = Math.min(maxSpacing, Math.max(minSpacing, rawSpacing));
-  wrap.style.setProperty('--overlap', `${spacing - cardWidth}px`);
+// 手札の重なり具合（--overlap）を、コンテナ幅に収まるように計算する。
+// 選択状態には一切依存させない（カードを選ぶたびに他のカードの位置が動かないようにするため）。
+function handMetrics(container) {
+  const cards = Array.from(container.children).filter((c) => c.classList.contains('card'));
+  const cs = getComputedStyle(container);
+  return {
+    cards,
+    cardWidth: cards.length ? cards[0].offsetWidth : 0, // 選択中の持ち上げ（transform）の影響を受けない幅
+    width: container.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0),
+  };
 }
+
+// 左端の数字とマークが読める最小の見え幅
+function handMinSpacing(cardWidth) {
+  return Math.max(cardWidth * 0.3, 19);
+}
+
+// count枚を1行に並べたとき、最小の見え幅以上で収まるか
+function handRowFits(m, count) {
+  if (count <= 1) return true;
+  return (m.width - m.cardWidth) / (count - 1) >= handMinSpacing(m.cardWidth);
+}
+
+function updateHandOverlap(container) {
+  const m = handMetrics(container);
+  const n = m.cards.length;
+  if (n <= 1 || !m.cardWidth) { container.style.removeProperty('--overlap'); return; }
+  const rawSpacing = (m.width - m.cardWidth) / (n - 1);
+  const spacing = Math.min(m.cardWidth + 6, Math.max(handMinSpacing(m.cardWidth), rawSpacing));
+  container.style.setProperty('--overlap', `${spacing - m.cardWidth}px`);
+}
+
+// 縦画面で手札が1行に収まらない（横スクロールが必要になる）ときは、重ならない2段に分けて全部見えるようにする。
+// 2段でも収まらない枚数なら、各段を詰めた上で横スクロール。横向きスマホは高さが足りないので常に1行。
+const HAND_MULTI_ROW_MQ = window.matchMedia('(orientation: portrait)');
+const HAND_MAX_ROWS = 2;
+
+function layoutHand(wrap, cardEls) {
+  const scrollLeft = wrap.scrollLeft;
+  wrap.innerHTML = '';
+  wrap.classList.remove('multi-rows');
+  wrap.style.removeProperty('--overlap');
+  for (const c of cardEls) wrap.appendChild(c);
+
+  const m = handMetrics(wrap);
+  let rows = 1;
+  if (HAND_MULTI_ROW_MQ.matches && m.cardWidth) {
+    while (rows < HAND_MAX_ROWS && !handRowFits(m, Math.ceil(cardEls.length / rows))) rows++;
+  }
+  if (rows === 1) {
+    updateHandOverlap(wrap);
+  } else {
+    wrap.innerHTML = '';
+    wrap.classList.add('multi-rows');
+    const perRow = Math.ceil(cardEls.length / rows);
+    for (let i = 0; i < cardEls.length; i += perRow) {
+      const row = el('div', 'hand-row');
+      for (const c of cardEls.slice(i, i + perRow)) row.appendChild(c);
+      wrap.appendChild(row);
+      updateHandOverlap(row);
+    }
+  }
+  // 再描画で横スクロール位置が先頭に戻ってしまわないようにする
+  wrap.scrollLeft = scrollLeft;
+}
+
+// 直前にタップしたカード。持ち上げアニメーションはこのカードにだけ付ける
+let handJustToggled = null;
 
 function renderHand(state) {
   const wrap = $('#my-hand');
-  wrap.innerHTML = '';
   const inSevenMode = state.pendingAction && state.pendingAction.type === 'sevenGive' && state.pendingAction.by === myPlayerId;
   const inTenMode = state.pendingAction && state.pendingAction.type === 'tenDiscard' && state.pendingAction.by === myPlayerId;
   const inExchangeMode = state.pendingAction && state.pendingAction.type === 'classExchange' && state.pendingAction.by === myPlayerId;
 
-  for (const card of state.myHand) {
+  const cardEls = state.myHand.map((card) => {
     if (inSevenMode) {
-      const picked = sevenSelected.includes(card.id);
-      wrap.appendChild(renderCardEl(card, {
-        selected: picked,
+      return renderCardEl(card, {
+        selected: sevenSelected.includes(card.id),
         onClick: () => toggleSevenCard(card.id, state.pendingAction.count),
-      }));
-    } else if (inTenMode) {
-      const picked = tenSelected.includes(card.id);
-      wrap.appendChild(renderCardEl(card, {
-        selected: picked,
-        onClick: () => toggleTenCard(card.id, state.pendingAction.count),
-      }));
-    } else if (inExchangeMode) {
-      const picked = exchangeSelected.includes(card.id);
-      wrap.appendChild(renderCardEl(card, {
-        selected: picked,
-        onClick: () => toggleExchangeCard(card.id, state.pendingAction.count),
-      }));
-    } else {
-      const selected = selectedCardIds.has(card.id);
-      wrap.appendChild(renderCardEl(card, {
-        selected,
-        onClick: () => {
-          if (selected) selectedCardIds.delete(card.id); else selectedCardIds.add(card.id);
-          vibrate(12);
-          renderHand(state);
-          updateActionButtons(state);
-        },
-      }));
+      });
     }
-  }
-  updateHandOverlap(wrap, state.myHand.length);
+    if (inTenMode) {
+      return renderCardEl(card, {
+        selected: tenSelected.includes(card.id),
+        onClick: () => toggleTenCard(card.id, state.pendingAction.count),
+      });
+    }
+    if (inExchangeMode) {
+      return renderCardEl(card, {
+        selected: exchangeSelected.includes(card.id),
+        onClick: () => toggleExchangeCard(card.id, state.pendingAction.count),
+      });
+    }
+    const selected = selectedCardIds.has(card.id);
+    return renderCardEl(card, {
+      selected,
+      onClick: () => {
+        if (selected) selectedCardIds.delete(card.id); else selectedCardIds.add(card.id);
+        handJustToggled = card.id;
+        vibrate(12);
+        renderHand(state);
+      },
+    });
+  });
+  state.myHand.forEach((card, i) => {
+    if (card.id === handJustToggled) cardEls[i].classList.add('pop');
+  });
+  handJustToggled = null;
+  layoutHand(wrap, cardEls);
   updateActionButtons(state);
 }
 
 let handResizeTimer = null;
-window.addEventListener('resize', () => {
+function scheduleHandRelayout() {
   clearTimeout(handResizeTimer);
   handResizeTimer = setTimeout(() => {
-    if (latestGame) updateHandOverlap($('#my-hand'), latestGame.myHand.length);
+    if (latestGame) renderHand(latestGame);
   }, 150);
-});
+}
+window.addEventListener('resize', scheduleHandRelayout);
+window.addEventListener('orientationchange', scheduleHandRelayout);
 
 function updateActionButtons(state) {
   const myTurn = state.currentPlayerId === myPlayerId && !state.pendingAction && !state.ended;
@@ -787,6 +851,15 @@ function updateActionButtons(state) {
       ? `${selectedCardIds.size}枚 選択中`
       : (canAct ? 'カードをタップして選択' : `手札 ${state.myHand.length}枚`);
     clearBtn.classList.toggle('hidden', selectedCardIds.size === 0);
+  } else {
+    const pa = state.pendingAction;
+    const picking = {
+      sevenGive: ['渡すカード', sevenSelected],
+      tenDiscard: ['捨てるカード', tenSelected],
+      classExchange: ['返すカード', exchangeSelected],
+    }[pa.type];
+    infoText.textContent = picking ? `${picking[0]}をタップ（${picking[1].length}/${pa.count}枚）` : '';
+    clearBtn.classList.add('hidden');
   }
 }
 
@@ -807,12 +880,31 @@ $('#btn-pass').addEventListener('click', () => {
   socket.emit('game:pass');
 });
 
+// PC向けキーボードショートカット: Enter=出す / P=パス / Esc=選択解除
+document.addEventListener('keydown', (e) => {
+  if (e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return;
+  if ($('#screen-game').classList.contains('hidden')) return;
+  if (e.target && e.target.closest && e.target.closest('input, textarea, select')) return;
+  if (document.querySelector('.modal:not(.hidden)')) return;
+  const key = e.key.toLowerCase();
+  if (key === 'enter') {
+    const btn = $('#btn-play');
+    if (!btn.disabled && !btn.classList.contains('hidden')) { e.preventDefault(); btn.click(); }
+  } else if (key === 'p') {
+    const btn = $('#btn-pass');
+    if (!btn.disabled && $('#action-bar').classList.contains('visible')) { e.preventDefault(); btn.click(); }
+  } else if (key === 'escape') {
+    if (selectedCardIds.size > 0) $('#btn-clear-sel').click();
+  }
+});
+
 // ---------- Qボンバー モーダル ----------
 
 function renderPendingModals(state) {
   const qModal = $('#modal-qbomber');
-  const sModal = $('#modal-seven');
+  const sModal = $('#panel-seven');
   const pending = state.pendingAction;
+  $('#game-center').classList.toggle('has-panel', isMyPanelAction(state));
 
   if (pending && pending.type === 'qbomber' && pending.by === myPlayerId) {
     qModal.classList.remove('hidden');
@@ -831,7 +923,7 @@ function renderPendingModals(state) {
     sevenAssign = {};
   }
 
-  const tModal = $('#modal-ten');
+  const tModal = $('#panel-ten');
   if (pending && pending.type === 'tenDiscard' && pending.by === myPlayerId) {
     tModal.classList.remove('hidden');
     renderTenModal(state, pending);
@@ -840,7 +932,7 @@ function renderPendingModals(state) {
     tenSelected = [];
   }
 
-  const eModal = $('#modal-exchange');
+  const eModal = $('#panel-exchange');
   if (pending && pending.type === 'classExchange' && pending.by === myPlayerId) {
     eModal.classList.remove('hidden');
     renderExchangeModal(state, pending);
@@ -878,6 +970,7 @@ $('#btn-qbomber-confirm').addEventListener('click', () => {
 // ---------- 7わたし モーダル ----------
 
 function toggleSevenCard(cardId, count) {
+  handJustToggled = cardId;
   const idx = sevenSelected.indexOf(cardId);
   if (idx >= 0) {
     sevenSelected.splice(idx, 1);
@@ -889,8 +982,18 @@ function toggleSevenCard(cardId, count) {
   renderGame(latestGame);
 }
 
+// 選んだカードの横に、まだ選んでいない残り枠を点線で表示する（10捨て・カード交換・7わたし共通）
+function renderEmptySlots(wrap, count) {
+  for (let i = 0; i < count; i++) wrap.appendChild(el('div', 'card-slot', '?'));
+}
+
+// パネル内の選択済みカード。タップすると選択を取り消せる
+function renderPickedCard(card, onRemove) {
+  return renderCardEl(card, { small: true, onClick: onRemove });
+}
+
 function renderSevenModal(state, pending) {
-  $('#seven-desc').textContent = `渡すカードを${pending.count}枚、手札から選んでください（下の一覧で相手を指定）`;
+  $('#seven-desc').textContent = `下の手札から渡すカードを${pending.count}枚選び、渡す相手をタップ（${sevenSelected.length}/${pending.count}枚）`;
   const wrap = $('#seven-cards');
   wrap.innerHTML = '';
   const others = state.players.filter((p) => p.status === 'active' && p.id !== myPlayerId);
@@ -898,25 +1001,31 @@ function renderSevenModal(state, pending) {
   for (const cardId of sevenSelected) {
     const card = state.myHand.find((c) => c.id === cardId);
     if (!card) continue;
+    // 渡せる相手が1人しかいない場合は自動で指定しておく
+    if (others.length === 1 && !sevenAssign[cardId]) sevenAssign[cardId] = others[0].id;
     const row = el('div', 'seven-card-row');
-    row.appendChild(renderCardEl(card, { small: true }));
-    const select = document.createElement('select');
-    const blank = document.createElement('option');
-    blank.value = '';
-    blank.textContent = '渡す相手を選択';
-    select.appendChild(blank);
+    row.appendChild(renderPickedCard(card, () => toggleSevenCard(cardId, pending.count)));
+    const targets = el('div', 'seven-targets');
     for (const o of others) {
-      const opt = document.createElement('option');
-      opt.value = o.id;
-      opt.textContent = o.name;
-      if (sevenAssign[cardId] === o.id) opt.selected = true;
-      select.appendChild(opt);
+      const chip = el('button', 'target-chip' + (sevenAssign[cardId] === o.id ? ' picked' : ''));
+      chip.type = 'button';
+      const face = el('div', 'avatar');
+      applyAvatarVisual(face, avatarForPlayer(o.id), o.name, o.id);
+      chip.append(face, el('span', 'target-name', o.name));
+      chip.addEventListener('click', () => {
+        sevenAssign[cardId] = o.id;
+        vibrate(12);
+        renderSevenModal(state, pending);
+      });
+      targets.appendChild(chip);
     }
-    select.addEventListener('change', () => {
-      sevenAssign[cardId] = select.value;
-      updateSevenConfirm(pending);
-    });
-    row.appendChild(select);
+    row.appendChild(targets);
+    wrap.appendChild(row);
+  }
+  if (sevenSelected.length < pending.count) {
+    const row = el('div', 'seven-card-row empty');
+    renderEmptySlots(row, 1);
+    row.appendChild(el('span', 'seven-empty-text', '下の手札からカードをタップ'));
     wrap.appendChild(row);
   }
   updateSevenConfirm(pending);
@@ -937,6 +1046,7 @@ $('#btn-seven-confirm').addEventListener('click', () => {
 // ---------- 10捨て モーダル ----------
 
 function toggleTenCard(cardId, count) {
+  handJustToggled = cardId;
   const idx = tenSelected.indexOf(cardId);
   if (idx >= 0) {
     tenSelected.splice(idx, 1);
@@ -954,8 +1064,9 @@ function renderTenModal(state, pending) {
   for (const cardId of tenSelected) {
     const card = state.myHand.find((c) => c.id === cardId);
     if (!card) continue;
-    wrap.appendChild(renderCardEl(card, { small: true }));
+    wrap.appendChild(renderPickedCard(card, () => toggleTenCard(cardId, pending.count)));
   }
+  renderEmptySlots(wrap, pending.count - tenSelected.length);
   $('#btn-ten-confirm').disabled = tenSelected.length !== pending.count;
 }
 
@@ -967,6 +1078,7 @@ $('#btn-ten-confirm').addEventListener('click', () => {
 // ---------- カード交換（階級制） モーダル ----------
 
 function toggleExchangeCard(cardId, count) {
+  handJustToggled = cardId;
   const idx = exchangeSelected.indexOf(cardId);
   if (idx >= 0) {
     exchangeSelected.splice(idx, 1);
@@ -985,8 +1097,9 @@ function renderExchangeModal(state, pending) {
   for (const cardId of exchangeSelected) {
     const card = state.myHand.find((c) => c.id === cardId);
     if (!card) continue;
-    wrap.appendChild(renderCardEl(card, { small: true }));
+    wrap.appendChild(renderPickedCard(card, () => toggleExchangeCard(cardId, pending.count)));
   }
+  renderEmptySlots(wrap, pending.count - exchangeSelected.length);
   $('#btn-exchange-confirm').disabled = exchangeSelected.length !== pending.count;
 }
 
@@ -1043,3 +1156,48 @@ $('#btn-forfeit-confirm').addEventListener('click', () => {
 $('#btn-forfeit-cancel').addEventListener('click', () => {
   $('#modal-forfeit').classList.add('hidden');
 });
+
+// ---------- PWA（ホーム画面に追加） ----------
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => { /* HTTP環境など登録できない場合は通常のWebアプリとして動く */ });
+  });
+}
+
+function isStandaloneApp() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
+function isIOSDevice() {
+  const ua = navigator.userAgent;
+  // iPadOS 13以降のSafariはMacとして名乗るため、タッチ対応かどうかでも判定する
+  return /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+}
+
+let deferredInstallPrompt = null;
+
+// Android（Chrome等）: ブラウザのインストールプロンプトを横取りして、ホーム画面のボタンから出す
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  $('#btn-install').classList.remove('hidden');
+});
+
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+  $('#btn-install').classList.add('hidden');
+});
+
+$('#btn-install').addEventListener('click', async () => {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  try { await deferredInstallPrompt.userChoice; } catch { /* noop */ }
+  deferredInstallPrompt = null;
+  $('#btn-install').classList.add('hidden');
+});
+
+// iOS: インストールAPIが無いので、Safariで開いているときだけ手順を案内する
+if (isIOSDevice() && !isStandaloneApp()) {
+  $('#ios-install-hint').classList.remove('hidden');
+}
