@@ -18,6 +18,7 @@ const PRESET_AVATARS = [
   { id: 'p5', url: 'https://res.cloudinary.com/mudnpbqy/image/upload/v1787220819/LINE_ALBUM_%E3%81%93%E3%81%86%E3%81%8D_260820_1.jpg' },
   { id: 'p6', url: 'https://res.cloudinary.com/mudnpbqy/image/upload/v1787220809/LINE_ALBUM_%E3%82%88%E3%81%86%E3%81%99%E3%81%91_260820_1.jpg' },
   { id: 'p7', url: 'https://res.cloudinary.com/mudnpbqy/image/upload/v1787220802/LINE_ALBUM_%E3%81%AF%E3%82%8B%E3%81%8D_%E8%97%A4__260820_1.jpg' },
+  { id: 'p8', url: 'https://res.cloudinary.com/mudnpbqy/image/upload/v1791190178/94773.jpg' },
 ];
 const PRESET_AVATAR_MAP = Object.fromEntries(PRESET_AVATARS.map((a) => [a.id, a.url]));
 
